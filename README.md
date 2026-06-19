@@ -4,6 +4,23 @@
 
 本插件基于 MaiBot SDK + NapCat 适配器运行。
 
+本项目的代码基于 MIT 协议开源。
+
+另，该README文件已经过精简，若想查看完整版README文件，请参考 `webreadme.md`。
+
+## 安装
+
+1. 将 `backrooms_escape` 文件夹放入 MaiBot 的 `plugins/` 目录下
+2. 编辑 `config.toml`，在 `[whitelist]` 中添加你的群号和 QQ 号（白名单默认开启）
+3. 在 MaiBot WebUI 中加载插件，或重启 MaiBot
+
+```toml
+[whitelist]
+enabled = true
+group_ids = ["你的群号"]
+user_ids = ["你的QQ号"]
+```
+
 ## 快速上手
 
 发送 `/br test` 验证插件，回复正常后使用 `/br start` 开始游戏。
