@@ -1,0 +1,36 @@
+{
+  "manifest_version": 2,
+  "id": "github.silencieuxzero.backrooms-escape",
+  "version": "1.0.0",
+  "name": "后室:逃出生天",
+  "description": "扮演M.E.G.CN工作人员，从Level 0出发在后室中寻找出口，不断切入下一个楼层直至Level 399的最终出口",
+  "author": {
+    "name": "Appennino(花束)",
+    "url": "https://github.com/silencieuxzero/backrooms_escape"
+  },
+  "license": "MIT",
+  "urls": {
+    "repository": "https://github.com/silencieuxzero/backrooms_escape",
+    "homepage": "https://github.com/silencieuxzero/backrooms_escape",
+    "documentation": "https://github.com/silencieuxzero/backrooms_escape",
+    "issues": "https://github.com/silencieuxzero/backrooms_escape/issues"
+  },
+  "host_application": {
+    "min_version": "1.0.0",
+    "max_version": "1.99.99"
+  },
+  "sdk": {
+    "min_version": "2.0.0",
+    "max_version": "2.99.99"
+  },
+  "dependencies": [],
+  "capabilities": [
+    "command.match",
+    "send.text",
+    "send.forward",
+    "config.get"
+  ],
+  "i18n": {
+    "default_locale": "zh-CN"
+  }
+}

@@ -1,0 +1,80 @@
+[plugin]
+enabled = true
+config_version = "2.0.0"
+
+[game]
+# 初始生命值
+initial_health = 100
+# 初始理智值
+initial_sanity = 100
+# 每次探索所消耗的理智值
+explore_sanity_cost = 5
+# 每次寻找出口所消耗的理智值
+exit_search_sanity_cost = 10
+# 成功找到出口的基础概率 (0.0 ~ 1.0)
+base_exit_chance = 0.4
+# 每次寻找失败后成功概率的提升值
+exit_chance_increment = 0.1
+# 在楼层中遭遇实体的基础概率
+entity_encounter_chance = 0.25
+# 探索时发现补给品的概率
+supply_find_chance = 0.3
+
+# ---- 各物品获取权重（权重越高，获得概率越大） ----
+# 物品           默认权重  说明
+# o1 (杏仁水)     3       恢复 30 点理智值
+# o2 (急救包)     3       恢复 30 点生命值
+# o3 (手电筒)     2       驱散笑魇，+5% 出口率
+# o4 (层级钥匙)   1       100% 找到出口（稀有）
+# o5 (无线电)     2       +5% 出口率
+# o6 (能量棒)     2       恢复 15 点生命值
+# o7 (镇定剂)     2       恢复 15 点理智值
+item_weight_o1 = 3
+item_weight_o2 = 3
+item_weight_o3 = 2
+item_weight_o4 = 1
+item_weight_o5 = 2
+item_weight_o6 = 2
+item_weight_o7 = 2
+
+[whitelist]
+# 是否启用白名单（关闭后所有用户均可使用插件）
+enabled = true
+# 群组白名单 — 在此填入允许使用插件的群号
+group_ids = [
+    # "123456789",
+    # "987654321",
+]
+# 私聊白名单 — 在此填入允许使用插件的用户 QQ 号
+user_ids = [
+    # "10001",
+    # "10002",
+]
+
+# ---- 白名单拒绝提示（可自定义） ----
+# 群组不在白名单时的提示
+group_deny_message = "你所在的群组不在白名单中，无法使用后室:逃出生天插件。"
+# 用户不在私聊白名单时的提示
+private_deny_message = "你不在白名单中，无法使用后室:逃出生天插件。"
+# 白名单启用但群组列表为空时的提示
+empty_group_list_message = "白名单已启用，但群组列表为空，请联系管理员添加。"
+# 白名单启用但私聊列表为空时的提示
+empty_private_list_message = "白名单已启用，但私聊白名单为空，请联系管理员添加。"
+
+[blacklist]
+# 是否启用黑名单（关闭后不拦截任何用户）
+enabled = false
+# 群组黑名单 — 在此填入禁止使用插件的群号
+group_ids = [
+    # "111222333",
+]
+# 用户黑名单 — 在此填入禁止使用插件的用户 QQ 号
+user_ids = [
+    # "111222333",
+]
+
+# ---- 黑名单拒绝提示（可自定义） ----
+# 群组被黑名单拦截时的提示
+group_deny_message = "你所在的群组已被加入黑名单，无法使用后室:逃出生天插件。"
+# 用户被黑名单拦截时的提示
+private_deny_message = "你已被加入黑名单，无法使用后室:逃出生天插件。"
