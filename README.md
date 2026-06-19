@@ -2,11 +2,11 @@
 
 扮演 M.E.G.CN 探员，从 Level 0 出发穿过层层后室，寻找最终出口 Level 399。
 
-本插件基于 MaiBot SDK + NapCat 适配器运行。
+本插件基于 MaiBot SDK + NapCat 适配器运行。本项目的代码基于 MIT 协议开源。
 
-本项目的代码基于 MIT 协议开源。
+由于作者水平有限，因而本插件的更新速度较快，当前还处于测试版本，请及时更新。
 
-另，该README文件已经过精简，若想查看完整版README文件，请参考 `webreadme.md`。
+由于插件的复杂性，本README文件仅包含核心功能说明。若想查看完整版README文件，请参考 `webreadme.md`。
 
 ## 安装
 

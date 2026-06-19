@@ -1,11 +1,12 @@
 """后室:逃出生天 — 故事/纸条模块
 
 在探索过程中，玩家有概率捡到带有后室背景故事的纸条。
-纸条内容从 l1_story.txt 文件中读取。
+纸条内容从 l1_story.txt ~ l11_story.txt 文件中读取。
 """
 
 from __future__ import annotations
 
+import glob
 import os
 import random
 from typing import Optional
@@ -14,42 +15,50 @@ from typing import Optional
 class StoryManager:
     """故事纸条管理器。
 
-    负责加载 l1_story.txt 中的故事文本，并在探索时随机提供纸条内容。
+    自动加载插件目录下所有 l*_story.txt 文件中的故事文本，
+    在探索时随机提供纸条内容。
     """
 
     SEPARATOR = "===STORY_"
 
-    def __init__(self, story_file: str = "l1_story.txt") -> None:
-        """初始化故事管理器。
-
-        Args:
-            story_file: 故事文本文件名（相对于本文件所在目录）。
-        """
+    def __init__(self) -> None:
+        """初始化故事管理器，自动发现并加载所有故事文件。"""
         self._stories: list[str] = []
-        self._load(story_file)
+        self._load_all()
 
-    def _load(self, story_file: str) -> None:
-        """从文本文件加载故事条目。
+    def _load_all(self) -> None:
+        """自动发现并加载所有 l*_story.txt 文件。"""
+        base_dir = os.path.dirname(__file__)
+        pattern = os.path.join(base_dir, "l*_story.txt")
+        story_files = sorted(glob.glob(pattern))
+
+        if not story_files:
+            # 兜底：尝试加载 l1_story.txt
+            fallback = os.path.join(base_dir, "l1_story.txt")
+            if os.path.isfile(fallback):
+                story_files = [fallback]
+
+        for file_path in story_files:
+            self._load_file(file_path)
+
+    def _load_file(self, file_path: str) -> None:
+        """加载单个故事文本文件。
 
         Args:
-            story_file: 故事文本文件名。
+            file_path: 故事文件的完整路径。
         """
-        file_path = os.path.join(os.path.dirname(__file__), story_file)
         if not os.path.isfile(file_path):
-            self._stories = []
             return
 
         with open(file_path, encoding="utf-8") as f:
             raw = f.read()
 
-        # 按 ===STORY_ 分隔符切分
         parts = raw.split(self.SEPARATOR)
         for part in parts:
-            # 跳过编号头和空内容
             cleaned = part.strip()
             if not cleaned:
                 continue
-            # 去掉开头的数字编号 "001===\n"
+            # 去掉开头的编号 "NNN===\n"
             idx = cleaned.find("===\n")
             if idx != -1:
                 cleaned = cleaned[idx + 4:].strip()
