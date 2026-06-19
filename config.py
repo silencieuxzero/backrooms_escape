@@ -205,7 +205,7 @@ class WhitelistConfig(PluginConfigBase):
     __ui_order__ = 2
 
     enabled: bool = Field(
-        default=True,
+        default=False,
         description="是否启用白名单（关闭后所有用户均可使用插件）",
         json_schema_extra={
             "label": "启用白名单",

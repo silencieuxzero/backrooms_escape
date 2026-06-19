@@ -41,7 +41,7 @@ item_weight_o7 = 2
 
 [whitelist]
 # 是否启用白名单（关闭后所有用户均可使用插件）
-enabled = true
+enabled = false
 # 群组白名单 — 在此填入允许使用插件的群号
 group_ids = [
     # "123456789",

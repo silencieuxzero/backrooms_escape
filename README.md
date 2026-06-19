@@ -11,7 +11,7 @@
 ## 安装
 
 1. 将 `backrooms_escape` 文件夹放入 MaiBot 的 `plugins/` 目录下
-2. 编辑 `config.toml`，在 `[whitelist]` 中添加你的群号和 QQ 号（白名单默认开启）
+2. 编辑 `config.toml`，若需限制访问范围，请在 `[whitelist]` 中添加你的群号和 QQ 号（白名单默认关闭）
 3. 在 MaiBot WebUI 中加载插件，或重启 MaiBot
 
 ```toml
@@ -95,9 +95,9 @@ output_mode = "text"      # 普通文本消息（默认）
 
 在 `config.toml` 中调整游戏参数和访问控制。
 
-### 白名单（默认开启）
+### 白名单（默认关闭）
 
-白名单默认开启，安装后请立即将你的群号和 QQ 号填入对应列表，否则所有消息都会被拒绝。
+白名单默认关闭，此时所有用户均可使用插件。若需限制访问，设置 `enabled = true` 并填入群号和 QQ 号。
 
 ```toml
 [whitelist]
@@ -105,8 +105,6 @@ enabled = true
 group_ids = ["你的群号"]
 user_ids = ["你的QQ号"]
 ```
-
-关闭白名单则所有人可用：`enabled = false`。
 
 ### 黑名单
 
