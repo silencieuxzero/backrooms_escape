@@ -253,7 +253,9 @@ class BackroomsRenderer:
             msg = f"\n⚠️ 危险！你遭遇了【{ename}】——{edata['description']}"
             if edamage == 0:
                 if ename == "笑魇":
-                    msg += "\n你的手电筒驱散了笑魇！你安全了。"
+                    msg += "\n你的手电筒驱散了笑魇！它消失在黑暗中。"
+                elif ename == "猎犬":
+                    msg += "\n手电筒的强光让猎犬退缩了，它夹着尾巴逃走了。"
                 else:
                     msg += "\n手电筒的亮光暂时让它犹豫了一下，为你争取了一些时间。"
             lines.append(msg)

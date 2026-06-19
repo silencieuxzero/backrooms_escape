@@ -1189,7 +1189,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             if entity_data:
                 edamage = entity_data["damage"]
                 if self._has_item(player, "o3"):
-                    if entity_name == "笑魇":
+                    if entity_name in ("笑魇", "猎犬"):
                         edamage = 0
                     else:
                         edamage = max(0, edamage - 10)
