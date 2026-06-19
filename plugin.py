@@ -1055,9 +1055,12 @@ class BackroomsGamePlugin(MaiBotPlugin):
         note_found = False
 
         if event["type"] == "discovery":
-            if event.get("give_item") and random.random() < cfg.supply_find_chance:
-                item_found = self._random_item()
-                player.inventory.append(item_found)
+            if event.get("give_item"):
+                if random.random() < cfg.supply_find_chance:
+                    item_found = self._random_item()
+                    player.inventory.append(item_found)
+                else:
+                    event_text += "……但里面已经空了。"
         elif event["type"] == "danger":
             if "health_cost" in event:
                 health_cost = event["health_cost"]
@@ -1184,9 +1187,12 @@ class BackroomsGamePlugin(MaiBotPlugin):
             ex_health_cost: int | None = None
             ex_note_found = False
 
-            if event.get("give_item") and random.random() < cfg.supply_find_chance:
-                ex_item_found = self._random_item()
-                player.inventory.append(ex_item_found)
+            if event.get("give_item"):
+                if random.random() < cfg.supply_find_chance:
+                    ex_item_found = self._random_item()
+                    player.inventory.append(ex_item_found)
+                else:
+                    event_text += "……但里面已经空了。"
             if "health_cost" in event:
                 ex_health_cost = event["health_cost"]
                 if self._has_item(player, "o2"):

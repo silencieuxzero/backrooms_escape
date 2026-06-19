@@ -191,15 +191,16 @@ class BackroomsRenderer:
             entity_encounter: (实体名, 实体数据, 实际伤害) 或 None。
         """
         lines = [f"🔍 你在 {ctx.level_info['title']} 中探索……"]
-        lines.append(event_text)
+
+        if note_found:
+            lines.append(event_text + " 使用 /br read 来阅读纸条。")
+        else:
+            lines.append(event_text)
 
         if item_found:
             lines.append(
                 f"🎒 你获得了：【{item_found['display_name']}】— {item_found['description']}"
             )
-
-        if note_found:
-            lines.append(" 使用 /br read 来阅读纸条。")
 
         if health_cost is not None and health_cost > 0:
             lines.append(
@@ -291,10 +292,10 @@ class BackroomsRenderer:
         if exit_attempts >= 3:
             lines.append("你已经搜索了很久，也许下次运气会好些。")
 
-        lines.append(f"\n{event_text}")
-
         if note_found:
-            lines.append(" 使用 /br read 来阅读纸条。")
+            lines.append(f"\n{event_text} 使用 /br read 来阅读纸条。")
+        else:
+            lines.append(f"\n{event_text}")
 
         if item_found:
             lines.append(
