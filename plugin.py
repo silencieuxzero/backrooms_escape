@@ -372,12 +372,12 @@ class BackroomsGamePlugin(MaiBotPlugin):
         )
         if not stream_id:
             self.ctx.logger.error("br_test: stream_id 为空，无法回复消息。kwargs=%s", kwargs)
-        success = await self.ctx.send.text(
-            self._renderer.render_test(),
+        success = await self._send(
             stream_id,
+            self._renderer.render_test(),
         )
         self.ctx.logger.info("br_test: send.text 结果=%s", success)
-        return True, "插件连通性测试通过", 0
+        return True, "插件连通性测试通过", 1
 
     @Command(
         "br_teststory",
@@ -429,10 +429,10 @@ class BackroomsGamePlugin(MaiBotPlugin):
             self._forward_node("M.E.G.CN-档案部", "M.E.G.CN 档案部 | 加密通讯", story_text),
         ]
 
-        self.ctx.logger.info("发送转发消息: send.forward nodes=%d", len(nodes))
-        await self.ctx.send.forward(nodes, stream_id)
+        self.ctx.logger.info("发送故事档案: nodes=%d", len(nodes))
+        await self._send(stream_id, story_text, nodes=nodes)
 
-        return True, "后室档案已发送", 0
+        return True, "后室档案已发送", 1
 
     # ==================== 转发消息工具方法 ====================
 
@@ -462,7 +462,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """开始新游戏。"""
         stream_id = kwargs.get("stream_id", "")
         await self._do_start(stream_id)
-        return True, "新游戏已开始", 0
+        return True, "新游戏已开始", 1
 
     @Command(
         "br_explore",
@@ -473,7 +473,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """探索当前楼层。"""
         stream_id = kwargs.get("stream_id", "")
         await self._do_explore(stream_id)
-        return True, "探索完成", 0
+        return True, "探索完成", 1
 
     @Command(
         "br_read",
@@ -487,23 +487,24 @@ class BackroomsGamePlugin(MaiBotPlugin):
         player = self._get_player(user_id)
 
         if not player or not player.game_started:
-            await self.ctx.send.text(self._renderer.render_not_started(), stream_id)
-            return True, "未开始游戏", 0
+            await self._send(stream_id, self._renderer.render_not_started())
+            return True, "未开始游戏", 1
 
         if not player.pending_note:
-            await self.ctx.send.text(self._renderer.render_no_note(), stream_id)
-            return True, "无纸条", 0
+            await self._send(stream_id, self._renderer.render_no_note())
+            return True, "无纸条", 1
 
         note_text = player.pending_note
         player.pending_note = None
 
-        self.ctx.logger.info("发送纸条: send.forward note_len=%d", len(note_text))
-        await self.ctx.send.forward(
-            [self._forward_node("M.E.G.CN-档案部", "M.E.G.CN 档案部 | 回收纸条", note_text)],
+        self.ctx.logger.info("发送纸条: note_len=%d", len(note_text))
+        await self._send(
             stream_id,
+            note_text,
+            nodes=[self._forward_node("M.E.G.CN-档案部", "M.E.G.CN 档案部 | 回收纸条", note_text)],
         )
 
-        return True, "纸条已阅读", 0
+        return True, "纸条已阅读", 1
 
     @Command(
         "br_exit",
@@ -514,7 +515,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """尝试寻找出口。"""
         stream_id = kwargs.get("stream_id", "")
         await self._do_exit(stream_id)
-        return True, "出口搜索完成", 0
+        return True, "出口搜索完成", 1
 
     @Command(
         "br_status",
@@ -525,7 +526,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """查看当前状态。"""
         stream_id = kwargs.get("stream_id", "")
         await self._do_status(stream_id)
-        return True, "状态已显示", 0
+        return True, "状态已显示", 1
 
     @Command(
         "br_inventory",
@@ -536,7 +537,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """查看背包。"""
         stream_id = kwargs.get("stream_id", "")
         await self._do_inventory(stream_id)
-        return True, "背包已显示", 0
+        return True, "背包已显示", 1
 
     @Command(
         "br_use",
@@ -549,11 +550,11 @@ class BackroomsGamePlugin(MaiBotPlugin):
         match_result = kwargs.get("match_result")
         item_name = str(match_result.group(1)).strip() if match_result else ""
         if not item_name:
-            await self.ctx.send.text(self._renderer.render_no_item_specified(), stream_id)
-            return True, "未指定物品", 0
+            await self._send(stream_id, self._renderer.render_no_item_specified())
+            return True, "未指定物品", 1
 
         await self._do_use(stream_id, item_name)
-        return True, f"物品 {item_name} 使用完成", 0
+        return True, f"物品 {item_name} 使用完成", 1
 
     @Command(
         "br_help",
@@ -564,7 +565,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """游戏帮助。"""
         stream_id = kwargs.get("stream_id", "")
         await self._do_help(stream_id)
-        return True, "帮助已显示", 0
+        return True, "帮助已显示", 1
 
     # ==================== 访问控制拦截 ====================
 
@@ -791,6 +792,23 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         return {"action": "continue"}
 
+    @HookHandler(
+        "chat.command.after_execute",
+        name="br_skip_planner",
+        description="确保 /br 命令处理后不进入 Planner/LLM 处理链",
+        mode=HookMode.BLOCKING,
+        order=HookOrder.LATE,
+        error_policy=ErrorPolicy.LOG,
+    )
+    async def skip_planner_after_command(self, **kwargs: Any):
+        """命令执行后标记消息已被消费，避免进入 Planner。"""
+        command_name = str(kwargs.get("command_name", "") or kwargs.get("name", ""))
+        if not command_name.startswith("br_"):
+            return {"action": "continue"}
+        self.ctx.logger.debug("skip_planner: 标记命令 %s 已处理", command_name)
+        # 修改返回结果阻止进一步处理
+        return {"result": (True, "命令已处理", 1)}
+
     # ==================== 辅助方法 ====================
 
     def _player_file_path(self, user_id: str) -> Path:
@@ -878,6 +896,33 @@ class BackroomsGamePlugin(MaiBotPlugin):
             game_config=self.config.game,
             level_info=self._get_level_info(player.current_level),
         )
+
+    async def _send(self, stream_id: str, text: str, *, nodes: list[dict] | None = None) -> bool:
+        """根据配置的消息输出模式发送消息。
+
+        Args:
+            stream_id: 消息会话 ID。
+            text: 消息文本（nodes 为 None 时发送此文本）。
+            nodes: 合并转发节点列表。当提供时，forward 模式使用此列表；
+                   text 模式将所有节点内容拼接为单条消息。
+
+        Returns:
+            发送是否成功。
+        """
+        mode = self.config.plugin.output_mode
+        if mode == "forward":
+            if nodes:
+                return await self.ctx.send.forward(nodes, stream_id)
+            node = self._forward_node("M.E.G.CN-操作终端", "M.E.G.CN 系统", text)
+            return await self.ctx.send.forward([node], stream_id)
+        # text 模式
+        if nodes:
+            # 将多节点拼接为单条消息
+            combined = "\n\n══════════════════════════\n\n".join(
+                n["content"][0]["data"] for n in nodes
+            )
+            return await self.ctx.send.text(combined, stream_id)
+        return await self.ctx.send.text(text, stream_id)
 
     def _get_or_create_player(self, user_id: str) -> PlayerState:
         """获取或创建玩家状态。"""
@@ -993,22 +1038,26 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._save_player(user_id)
 
         ctx = self._make_ctx(player)
-        await self.ctx.send.text(self._renderer.render_start(ctx), stream_id)
+        nodes = [
+            self._forward_node("M.E.G.CN-指挥中心", "M.E.G.CN 指挥部", text)
+            for text in self._renderer.render_start_nodes(ctx)
+        ]
+        await self._send(stream_id, "", nodes=nodes)
 
     async def _do_use(self, stream_id: str, item_name: str) -> None:
         """使用背包物品。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
         if not player or not player.game_started:
-            await self.ctx.send.text(self._renderer.render_not_started(), stream_id)
+            await self._send(stream_id, self._renderer.render_not_started())
             return
 
         cfg = self.config.game
         item = self._use_item(player, item_name)
         if not item:
-            await self.ctx.send.text(
-                self._renderer.render_item_not_found(self._item_display_name(item_name)),
+            await self._send(
                 stream_id,
+                self._renderer.render_item_not_found(self._item_display_name(item_name)),
             )
             return
 
@@ -1024,9 +1073,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
         ctx = self._make_ctx(player)
         remaining = [i.get("display_name", i["name"]) for i in player.inventory]
 
-        await self.ctx.send.text(
-            self._renderer.render_use_item(item, ctx, remaining),
+        await self._send(
             stream_id,
+            self._renderer.render_use_item(item, ctx, remaining),
         )
         self._save_player(user_id)
 
@@ -1035,11 +1084,11 @@ class BackroomsGamePlugin(MaiBotPlugin):
         user_id = str(stream_id)
         player = self._get_player(user_id)
         if not player or not player.game_started:
-            await self.ctx.send.text(self._renderer.render_not_started(), stream_id)
+            await self._send(stream_id, self._renderer.render_not_started())
             return
 
         if player.current_level == 399:
-            await self.ctx.send.text(self._renderer.render_already_at_399(), stream_id)
+            await self._send(stream_id, self._renderer.render_already_at_399())
             return
 
         cfg = self.config.game
@@ -1107,9 +1156,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
             self._delete_player_save(user_id)
 
         ctx = self._make_ctx(player)
-        await self.ctx.send.text(
-            self._renderer.render_explore(ctx, event_text, item_found, health_cost, note_found, entity_encounter),
+        await self._send(
             stream_id,
+            self._renderer.render_explore(ctx, event_text, item_found, health_cost, note_found, entity_encounter),
         )
         self._save_player(user_id)
 
@@ -1118,16 +1167,16 @@ class BackroomsGamePlugin(MaiBotPlugin):
         user_id = str(stream_id)
         player = self._get_player(user_id)
         if not player or not player.game_started:
-            await self.ctx.send.text(self._renderer.render_not_started(), stream_id)
+            await self._send(stream_id, self._renderer.render_not_started())
             return
 
         cfg = self.config.game
 
         # Level 399 特殊处理
         if player.current_level == 399:
-            await self.ctx.send.text(
-                self._renderer.render_level399_escape(player.current_level),
+            await self._send(
                 stream_id,
+                self._renderer.render_level399_escape(player.current_level),
             )
             del self._players[user_id]
             self._delete_player_save(user_id)
@@ -1173,9 +1222,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
             new_level_info = self._get_level_info(player.current_level)
             ctx = self._make_ctx(player)
-            await self.ctx.send.text(
-                self._renderer.render_exit_found(ctx, new_level_info, shortcut_desc, from_level),
+            await self._send(
                 stream_id,
+                self._renderer.render_exit_found(ctx, new_level_info, shortcut_desc, from_level),
             )
         else:
             # 没找到出口
@@ -1212,12 +1261,12 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 self._delete_player_save(user_id)
 
             ctx = self._make_ctx(player)
-            await self.ctx.send.text(
+            await self._send(
+                stream_id,
                 self._renderer.render_exit_not_found(
                     ctx, player.exit_attempts, event_text,
                     ex_item_found, ex_health_cost, ex_note_found,
                 ),
-                stream_id,
             )
 
         self._save_player(user_id)
@@ -1227,14 +1276,14 @@ class BackroomsGamePlugin(MaiBotPlugin):
         user_id = str(stream_id)
         player = self._get_player(user_id)
         if not player or not player.game_started:
-            await self.ctx.send.text(self._renderer.render_not_started(), stream_id)
+            await self._send(stream_id, self._renderer.render_not_started())
             return
 
         ctx = self._make_ctx(player)
         inventory_text = self._format_inventory(player)
-        await self.ctx.send.text(
-            self._renderer.render_status(ctx, inventory_text),
+        await self._send(
             stream_id,
+            self._renderer.render_status(ctx, inventory_text),
         )
 
     async def _do_inventory(self, stream_id: str) -> None:
@@ -1242,7 +1291,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         user_id = str(stream_id)
         player = self._get_player(user_id)
         if not player or not player.game_started:
-            await self.ctx.send.text(self._renderer.render_not_started(), stream_id)
+            await self._send(stream_id, self._renderer.render_not_started())
             return
 
         inventory_text = self._format_inventory(player)
@@ -1260,14 +1309,14 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not hints:
             hints.append("探索楼层时有几率找到更多物品。使用 /br explore 开始探索。")
 
-        await self.ctx.send.text(
-            self._renderer.render_inventory(inventory_text, hints),
+        await self._send(
             stream_id,
+            self._renderer.render_inventory(inventory_text, hints),
         )
 
     async def _do_help(self, stream_id: str) -> None:
         """游戏帮助。"""
-        await self.ctx.send.text(self._renderer.render_help(), stream_id)
+        await self._send(stream_id, self._renderer.render_help())
 
 
 def create_plugin() -> BackroomsGamePlugin:

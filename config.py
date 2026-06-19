@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from maibot_sdk import Field, PluginConfigBase
 
 
@@ -19,6 +21,15 @@ class PluginSectionConfig(PluginConfigBase):
             "label": "启用插件",
             "hint": "关闭后插件将停止响应，所有游戏功能不可用。",
             "order": 0,
+        },
+    )
+    output_mode: Literal["text", "forward"] = Field(
+        default="text",
+        description="消息输出模式：text=普通消息，forward=合并转发消息",
+        json_schema_extra={
+            "label": "消息输出模式",
+            "hint": "选择插件消息的发送方式。text=普通文本消息，forward=合并转发消息（更美观）。",
+            "order": 1,
         },
     )
     config_version: str = Field(

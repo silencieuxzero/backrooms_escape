@@ -136,6 +136,44 @@ class BackroomsRenderer:
             "祝你好运，探员。"
         )
 
+    def render_start_nodes(self, ctx: RenderContext) -> list[str]:
+        """游戏开始消息，拆分为多个转发节点。"""
+        info = ctx.level_info
+        return [
+            # 节点 1：标题 + 楼层信息
+            (
+                "══════════════════════════\n"
+                "  🏢 后 室 逃 生 🏃\n"
+                "══════════════════════════\n\n"
+                f"{info['title']}\n"
+                f"危险等级：{info['danger']}\n\n"
+                f"{info['description']}"
+            ),
+            # 节点 2：角色背景
+            (
+                "你是 M.E.G.CN（探险者总署中文分部）的探员。\n"
+                "你被困在了一个叫做「后室」的异次元空间之中。\n"
+                "这里没有日夜，没有出口的尽头。\n"
+                "但你有经验、有装备、有信念。\n\n"
+                "你的任务只有一个——\n"
+                "找到通往 Level 399 的最终出口，回到现实世界。"
+            ),
+            # 节点 3：命令列表
+            (
+                "📋 可用命令：\n\n"
+                "  /br teststory — 查看后室背景故事\n"
+                "  /br test      — 插件连通性测试\n"
+                "  /br explore   — 探索当前楼层\n"
+                "  /br exit      — 尝试寻找出口\n"
+                "  /br read      — 阅读纸条\n"
+                "  /br use <物品> — 使用物品\n"
+                "  /br status    — 查看当前状态\n"
+                "  /br inventory — 查看背包\n"
+                "  /br help      — 游戏帮助\n\n"
+                "祝你好运，探员。"
+            ),
+        ]
+
     def render_use_item(
         self, item: dict, ctx: RenderContext, remaining_items: list[str]
     ) -> str:

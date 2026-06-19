@@ -76,13 +76,20 @@
 
 本插件使用 MaiBot SDK 的 `@Command` 组件进行命令路由，当用户消息匹配命令的正则模式时，MaiBot 会自动调度执行对应的处理函数，匹配到的消息不会进入 Planner/LLM 处理链。
 
- 所有游戏命令以 `/br` 为前缀，兼容 NapCat（OneBot v11）消息格式。
+所有游戏命令以 `/br` 为前缀，兼容 NapCat（OneBot v11）消息格式。
+
+### 消息输出模式
+
+所有游戏输出统一通过 `_send()` 方法发送，根据 `config.toml` 中的 `[plugin]` → `output_mode` 配置自动切换：
+
+- **`"text"`**（默认）：所有回复以普通文本形式发送
+- **`"forward"`**：所有回复以合并转发消息形式发送，支持多节点拆分展示
 
 ### 合并转发消息
 
-`/br teststory` 命令通过 `send.forward()` 发送合并转发消息展示后室档案。
+`/br teststory` 和 `/br read` 命令在 `output_mode = "forward"` 时使用合并转发消息展示。
 
-调用方式：
+节点格式：
 ```python
 nodes = [
     {
@@ -90,9 +97,7 @@ nodes = [
         "user_nickname": "昵称",
         "content": [{"type": "text", "data": "消息内容"}],
     },
-    ...
 ]
-await self.ctx.send.forward(nodes, stream_id)
 ```
 
 adapter 内部流程：
@@ -214,6 +219,18 @@ adapter 内部流程：
 ## 配置说明
 
 可在 `config.toml` 中调整游戏参数和访问控制。配置模型定义在 `config.py` 中，包含五个配置段：`[plugin]`、`[game]`、`[whitelist]`、`[blacklist]`。
+
+### 插件输出模式 `[plugin]`
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `output_mode` | `"text"` | 消息输出模式：`"text"`=普通消息，`"forward"`=合并转发消息 |
+
+```toml
+[plugin]
+output_mode = "text"      # 普通文本消息（默认）
+# output_mode = "forward" # 合并转发消息（所有回复以合并转发形式发送）
+```
 
 ### 游戏参数 `[game]`
 

@@ -21,6 +21,19 @@ group_ids = ["你的群号"]
 user_ids = ["你的QQ号"]
 ```
 
+## 输出模式
+
+可在 `config.toml` 的 `[plugin]` 段中设置消息输出模式：
+
+```toml
+[plugin]
+output_mode = "text"      # 普通文本消息（默认）
+# output_mode = "forward" # 合并转发消息（更美观）
+```
+
+- `text`：所有游戏回复以普通文本形式发送
+- `forward`：所有游戏回复以合并转发消息形式发送
+
 ## 快速上手
 
 发送 `/br test` 验证插件，回复正常后使用 `/br start` 开始游戏。
