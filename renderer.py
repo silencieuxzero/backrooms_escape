@@ -436,7 +436,7 @@ class BackroomsRenderer:
         """人物关系图。
 
         Args:
-            people_net_text: config_other/people_story.txt 完整内容。
+            people_net_text: config_other/people_relationship.txt 完整内容。
             unlocked_chars: 玩家已解锁的角色 ID 集合。
 
         Returns:

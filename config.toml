@@ -9,7 +9,7 @@ config_version = "2.0.0"
 initial_health = 100
 # 初始理智值
 initial_sanity = 100
-# 每次探索所消耗的理智值（v1.0.2 后调整为 2）
+# 每次探索所消耗的理智值（v1.0.1 后调整为 2）
 explore_sanity_cost = 2
 # 每次寻找出口所消耗的理智值
 exit_search_sanity_cost = 10

@@ -292,6 +292,29 @@ SHORTCUT_POOL = [
 ]
 
 
+# 名人名言池
+FAMOUS_QUOTES = [
+    "「世界上只有一种真正的英雄主义，那就是在认清生活的真相后依然热爱生活。」—— 罗曼·罗兰",
+    "「知行合一。」—— 王阳明",
+    "「为天地立心，为生民立命，为往圣继绝学，为万世开太平。」—— 张载",
+    "「人生到处知何似，应似飞鸿踏雪泥。」—— 苏轼",
+    "「黑夜给了我黑色的眼睛，我却用它寻找光明。」—— 顾城",
+    "「血液的作用之一，是为信仰付出代价。」—— 某教科书",
+    "「生活不可能像你想象得那么好，但也不会像你想象得那么糟。」—— 莫泊桑",
+    "「路漫漫其修远兮，吾将上下而求索。」—— 屈原",
+    "「人生如逆旅，我亦是行人。」—— 苏轼",
+    "「我思故我在。」—— 笛卡尔",
+    "「自由不是做你想做的事，而是不做你不想做的事。」—— 卢梭",
+    "「认识你自己。」—— 苏格拉底",
+    "「凡事预则立，不预则废。」——《礼记》",
+    "「山重水复疑无路，柳暗花明又一村。」—— 陆游",
+    "「竹杖芒鞋轻胜马，谁怕？一蓑烟雨任平生。」—— 苏轼",
+    "「长风破浪会有时，直挂云帆济沧海。」—— 李白",
+    "「沉舟侧畔千帆过，病树前头万木春。」—— 刘禹锡",
+    "「天生我材必有用，千金散尽还复来。」—— 李白",
+]
+
+
 # ==================== 玩家状态 ====================
 
 @dataclass
@@ -452,8 +475,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     @staticmethod
     def _load_people_net() -> str:
-        """从 config_other/people_story.txt 加载人物关系文本。"""
-        file_path = Path(__file__).parent / "config_other" / "people_story.txt"
+        """从 config_other/people_relationship.txt 加载人物关系文本。"""
+        file_path = Path(__file__).parent / "config_other" / "people_relationship.txt"
         if not file_path.is_file():
             return "暂无人物关系数据。"
         try:
@@ -585,6 +608,17 @@ class BackroomsGamePlugin(MaiBotPlugin):
         stream_id = kwargs.get("stream_id", "")
         await self._do_people_net(stream_id)
         return True, "人物关系已显示", 1
+
+    @Command(
+        "br_say",
+        description="随机名言 — 输出一句名人名言",
+        pattern=r"^/br\s+say$",
+    )
+    async def handle_say(self, **kwargs: Any):
+        """随机输出一句名人名言。"""
+        stream_id = kwargs.get("stream_id", "")
+        await self._do_say(stream_id)
+        return True, "名言已发送", 1
 
     # ==================== 访问控制拦截 ====================
 
@@ -1361,6 +1395,14 @@ class BackroomsGamePlugin(MaiBotPlugin):
         await self._send(
             stream_id,
             self._renderer.render_people_net(self._people_net_text, unlocked),
+        )
+
+    async def _do_say(self, stream_id: str) -> None:
+        """随机输出一句名人名言。"""
+        quote = random.choice(FAMOUS_QUOTES)
+        await self._send(
+            stream_id,
+            f"══ 名人名言 ══\n\n{quote}",
         )
 
 
