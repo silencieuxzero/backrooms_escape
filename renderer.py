@@ -217,6 +217,7 @@ class BackroomsRenderer:
         health_cost: int | None,
         note_found: bool,
         entity_encounter: tuple[str, dict, int] | None,
+        char_encounter: tuple[str, str] | None = None,
     ) -> str:
         """探索结果消息。
 
@@ -227,6 +228,7 @@ class BackroomsRenderer:
             health_cost: 事件造成的生命值伤害（None 表示无伤害）。
             note_found: 是否发现了纸条。
             entity_encounter: (实体名, 实体数据, 实际伤害) 或 None。
+            char_encounter: (角色ID, 剧情文本) 或 None。
         """
         lines = [f"🔍 你在 {ctx.level_info['title']} 中探索……"]
 
@@ -259,6 +261,22 @@ class BackroomsRenderer:
                 lines.append(
                     f"💔 生命值 -{edamage}（当前：{ctx.health}/{ctx.initial_health}）"
                 )
+
+        # 角色遭遇
+        if char_encounter:
+            char_id, story_text = char_encounter
+            if char_id == "ankexin":
+                lines.append("\n═════ 你在 Alpha 基地遇到了安可欣 ═════")
+                lines.append("")
+                lines.append(story_text)
+                lines.append("")
+                lines.append("═══════════════════════════════════")
+            elif char_id == "anjinian":
+                lines.append("\n═════ 你在维修区遇到了安继年 ═════")
+                lines.append("")
+                lines.append(story_text)
+                lines.append("")
+                lines.append("═══════════════════════════════════")
 
         # 理智值过低
         warn = self.low_sanity_warning(ctx.sanity)
@@ -400,7 +418,8 @@ class BackroomsRenderer:
             "  /br status     — 查看探员状态\n"
             "  /br inventory  — 查看背包\n"
             "  /br use <物品> — 使用背包中的物品（如 /br use o1）\n"
-            "  /br help       — 显示此帮助\n\n"
+            "  /br help       — 显示此帮助\n"
+            "  /br people_net — 已解锁人物关系图\n\n"
             "⚙️ 游戏机制：\n"
             "  ❤️ 生命值 — 归零则游戏结束\n"
             "  🧠 理智值 — 消耗在探索和找出口中，可使用 o1(杏仁水) 恢复\n"
@@ -412,6 +431,45 @@ class BackroomsRenderer:
             "  · 层级钥匙能确保一定找到出口\n\n"
             "祝你好运，M.E.G.CN 探员！后室等着你去征服。"
         )
+
+    def render_people_net(self, people_net_text: str, unlocked_chars: set[str]) -> str:
+        """人物关系图。
+
+        Args:
+            people_net_text: config_other/people_story.txt 完整内容。
+            unlocked_chars: 玩家已解锁的角色 ID 集合。
+
+        Returns:
+            格式化后的人物关系文本。
+        """
+        lines = ["══════════════════════\n  🕸️ 人物关系图\n══════════════════════\n"]
+        # 始终显示已知人物
+        known = {"ankexin": "安可欣", "anjinian": "安继年"}
+        for cid, cname in known.items():
+            if cid in unlocked_chars:
+                lines.append(f"✅ {cname} —— 已解锁")
+            else:
+                lines.append(f"❓ ??? —— 尚未遇到")
+        lines.append("")
+        lines.append("人物背景与关系：")
+        # 只显示已解锁角色的相关信息
+        sections = people_net_text.split("\n\n")
+        for section in sections:
+            if not section.strip():
+                continue
+            # 检查该段是否涉及已解锁角色
+            show_section = False
+            for cid, cname in known.items():
+                if cid in unlocked_chars and cname in section:
+                    show_section = True
+                    break
+            if section.startswith("人物关系"):
+                # 只有当至少一个角色解锁时才显示关系
+                if unlocked_chars:
+                    show_section = True
+            if show_section:
+                lines.append(section)
+        return "\n".join(lines)
 
     def render_test(self) -> str:
         """连通性测试回显。"""

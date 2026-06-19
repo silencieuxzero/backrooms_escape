@@ -12,6 +12,84 @@ import random
 from typing import Optional
 
 
+class PeopleStoryManager:
+    """人物剧情管理器。
+
+    自动加载 people_story/ 目录下的所有 .txt 文件，
+    每个文件代表一个角色，以文件名（不含扩展名）为角色 ID。
+    """
+
+    SEPARATOR = "===CHARACTER_"
+
+    def __init__(self) -> None:
+        """初始化人物剧情管理器，自动发现并加载所有剧情文件。"""
+        self._stories: dict[str, list[str]] = {}
+        self._load_all()
+
+    def _load_all(self) -> None:
+        """自动发现并加载 people_story/ 下所有 .txt 文件。"""
+        base_dir = os.path.join(os.path.dirname(__file__), "people_story")
+        if not os.path.isdir(base_dir):
+            return
+        pattern = os.path.join(base_dir, "*.txt")
+        story_files = sorted(glob.glob(pattern))
+
+        for file_path in story_files:
+            char_id = os.path.splitext(os.path.basename(file_path))[0]
+            self._load_file(char_id, file_path)
+
+    def _load_file(self, char_id: str, file_path: str) -> None:
+        """加载单个角色剧情文件。
+
+        Args:
+            char_id: 角色 ID（文件名不含扩展名）。
+            file_path: 剧情文件的完整路径。
+        """
+        if not os.path.isfile(file_path):
+            return
+
+        with open(file_path, encoding="utf-8") as f:
+            raw = f.read()
+
+        parts = raw.split(self.SEPARATOR)
+        stories: list[str] = []
+        for part in parts:
+            cleaned = part.strip()
+            if not cleaned:
+                continue
+            idx = cleaned.find("===\n")
+            if idx != -1:
+                cleaned = cleaned[idx + 4:].strip()
+            if cleaned:
+                stories.append(cleaned)
+
+        if stories:
+            self._stories[char_id] = stories
+
+    @property
+    def character_ids(self) -> list[str]:
+        """返回所有已加载的角色 ID 列表。"""
+        return list(self._stories.keys())
+
+    def get_story_count(self, char_id: str) -> int:
+        """获取指定角色的剧情数量。"""
+        return len(self._stories.get(char_id, []))
+
+    def get_random_story(self, char_id: str) -> Optional[str]:
+        """随机获取指定角色的一个剧情片段。
+
+        Args:
+            char_id: 角色 ID。
+
+        Returns:
+            随机剧情文本；角色不存在或无剧情时返回 None。
+        """
+        stories = self._stories.get(char_id)
+        if not stories:
+            return None
+        return random.choice(stories)
+
+
 class StoryManager:
     """故事纸条管理器。
 

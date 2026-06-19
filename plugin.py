@@ -16,7 +16,7 @@ from maibot_sdk import Command, HookHandler, MaiBotPlugin
 from maibot_sdk.types import HookMode, HookOrder, ErrorPolicy
 
 from .config import BackroomsGameConfig
-from .story import StoryManager
+from .story import StoryManager, PeopleStoryManager
 from .renderer import BackroomsRenderer, RenderContext
 
 
@@ -305,6 +305,7 @@ class PlayerState:
     game_started: bool = False
     exit_attempts: int = 0  # 当前层级尝试找出口的次数
     pending_note: str | None = None  # 待阅读的纸条内容
+    unlocked_chars: set[str] = field(default_factory=set)  # 已解锁的角色 ID 集合
 
 
 # ==================== 插件主体 ====================
@@ -318,12 +319,16 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """插件加载时初始化玩家数据存储，并恢复已有存档。"""
         self._players: dict[str, PlayerState] = {}
         self._story_manager = StoryManager()
+        self._people_manager = PeopleStoryManager()
         self._renderer = BackroomsRenderer()
 
         # 创建持久化数据目录
         self._data_dir = Path(__file__).parent / "br_data"
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self.ctx.logger.info("br_data 目录已就绪: %s", self._data_dir)
+
+        # 加载人物关系文件
+        self._people_net_text = self._load_people_net()
 
         # 恢复已有玩家存档
         self._load_all_players()
@@ -438,20 +443,23 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     @staticmethod
     def _forward_node(user_id: str, user_nickname: str, content: str) -> dict:
-        """构建 send.forward() 兼容的转发节点。
-
-        adapter 流程:
-          1. _contains_forward_segment(raw_message) 检测 type=forward
-          2. _build_forward_nodes() 映射: user_id→uin, user_nickname→name, content→segments
-          3. → send_group_forward_msg / send_private_forward_msg → NapCat
-
-        content 格式: [{ "type": "text", "data": "文本字符串" }]
-        """
+        """构建 send.forward() 兼容的转发节点。"""
         return {
             "user_id": user_id,
             "user_nickname": user_nickname,
             "content": [{"type": "text", "data": content}],
         }
+
+    @staticmethod
+    def _load_people_net() -> str:
+        """从 config_other/people_story.txt 加载人物关系文本。"""
+        file_path = Path(__file__).parent / "config_other" / "people_story.txt"
+        if not file_path.is_file():
+            return "暂无人物关系数据。"
+        try:
+            return file_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return "人物关系文件读取失败。"
 
     @Command(
         "br_start",
@@ -566,6 +574,17 @@ class BackroomsGamePlugin(MaiBotPlugin):
         stream_id = kwargs.get("stream_id", "")
         await self._do_help(stream_id)
         return True, "帮助已显示", 1
+
+    @Command(
+        "br_people_net",
+        description="人物关系图 — 显示已解锁角色的背景与关系",
+        pattern=r"^/br\s+people_net$",
+    )
+    async def handle_people_net(self, **kwargs: Any):
+        """人物关系图。"""
+        stream_id = kwargs.get("stream_id", "")
+        await self._do_people_net(stream_id)
+        return True, "人物关系已显示", 1
 
     # ==================== 访问控制拦截 ====================
 
@@ -831,6 +850,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             "game_started": player.game_started,
             "exit_attempts": player.exit_attempts,
             "pending_note": player.pending_note,
+            "unlocked_chars": sorted(player.unlocked_chars),
         }
         filepath = self._player_file_path(user_id)
         try:
@@ -857,6 +877,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             game_started=data.get("game_started", False),
             exit_attempts=data.get("exit_attempts", 0),
             pending_note=data.get("pending_note"),
+            unlocked_chars=set(data.get("unlocked_chars", [])),
         )
 
     def _delete_player_save(self, user_id: str) -> None:
@@ -1145,6 +1166,18 @@ class BackroomsGamePlugin(MaiBotPlugin):
                     player.health = max(0, player.health - edamage)
                 entity_encounter = (entity_name, entity_data, edamage)
 
+        # Level 1 特殊：在 M.E.G.CN Alpha 基地遇到角色
+        char_encounter: tuple[str, str] | None = None
+        if player.current_level == 1:
+            level1_chars = [cid for cid in ("ankexin", "anjinian")
+                            if self._people_manager.get_story_count(cid) > 0]
+            if level1_chars and random.random() < 0.40:
+                char_id = random.choice(level1_chars)
+                story_text = self._people_manager.get_random_story(char_id)
+                if story_text:
+                    char_encounter = (char_id, story_text)
+                    player.unlocked_chars.add(char_id)
+
         # 理智值过低效果
         if player.sanity <= 0:
             player.health = max(0, player.health - 10)
@@ -1158,7 +1191,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         ctx = self._make_ctx(player)
         await self._send(
             stream_id,
-            self._renderer.render_explore(ctx, event_text, item_found, health_cost, note_found, entity_encounter),
+            self._renderer.render_explore(ctx, event_text, item_found, health_cost, note_found, entity_encounter, char_encounter),
         )
         self._save_player(user_id)
 
@@ -1317,6 +1350,18 @@ class BackroomsGamePlugin(MaiBotPlugin):
     async def _do_help(self, stream_id: str) -> None:
         """游戏帮助。"""
         await self._send(stream_id, self._renderer.render_help())
+
+    async def _do_people_net(self, stream_id: str) -> None:
+        """显示人物关系图。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        unlocked: set[str] = set()
+        if player and player.game_started:
+            unlocked = player.unlocked_chars
+        await self._send(
+            stream_id,
+            self._renderer.render_people_net(self._people_net_text, unlocked),
+        )
 
 
 def create_plugin() -> BackroomsGamePlugin:

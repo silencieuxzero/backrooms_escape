@@ -4,10 +4,17 @@
 - 输出模式配置：`config.toml` 新增 `output_mode` 字段，支持 `"text"`（普通消息）和 `"forward"`（合并转发消息）两种模式
 - `_send()` 辅助方法：所有游戏消息统一通过该方法发送，自动根据配置选择模式
 - 防 planner 钩子：`br_skip_planner` 确保命令处理后不会进入 LLM/Planner 处理链
+- 人物剧情系统：`people_story/` 目录，可加载自定义角色剧情文件（`===CHARACTER_NNN===` 分隔）
+- Level 1 Alpha 基地特殊事件：40% 概率在探索时遇到角色（安可欣、安继年）
+- `/br people_net` 命令：查看已解锁人物关系图（数据来自 `config_other/people_story.txt`）
+- `config_other/people_story.txt`：人物关系配置文件，记录安可欣与安继年的姐弟关系
+- 角色解锁系统：遭遇角色后自动解锁，仅已解锁角色会显示在人物关系图中
+- 存档系统新增 `unlocked_chars` 字段，角色解锁状态持久化到 JSON
 
 ### 变更
 - 命令拦截等级调整为 `1`（兼顾防 LLM 处理与消息去重）
 - 白名单默认关闭（`enabled = false`），安装后所有用户可直接使用，无需手动配置
+- 每次探索消耗理智值从 5 点调整为 **2 点**
 
 ### 修复
 - 修复 `/br start` 消息输出模式切换：当 `output_mode = "forward"` 时仍使用 3 节点合并转发

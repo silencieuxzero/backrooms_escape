@@ -73,7 +73,7 @@ class GameConfig(PluginConfigBase):
 
     # ---- 探索消耗 ----
     explore_sanity_cost: int = Field(
-        default=5,
+        default=2,
         description="每次探索所消耗的理智值",
         json_schema_extra={
             "label": "探索理智消耗",
