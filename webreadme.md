@@ -304,20 +304,21 @@ user_ids = ["444555666"]
 
 ```
 backrooms_escape/
-├── l1_story.txt       ← Level 0~1 相关故事（前厅、宜居区）
-├── l2_story.txt       ← Level 2 相关故事（管道梦魇）
-├── l3_story.txt       ← Level 3 相关故事（电气站）
-├── l4_story.txt       ← Level 4 相关故事（废弃办公室）
-├── l5_story.txt       ← Level 5 相关故事（恐怖旅馆）
-├── l6_story.txt       ← Level 6 相关故事（熄灯）
-├── l7_story.txt       ← Level 7 相关故事（深海恐惧）
-├── l8_story.txt       ← Level 8 相关故事（洞穴系统）
-├── l9_story.txt       ← Level 9 相关故事（暗黑郊区）
-├── l10_story.txt      ← Level 10 相关故事（丰收之景）
-├── l11_story.txt      ← Level 11 相关故事（无尽城市）
+├── level_story/
+│   ├── l1_story.txt       ← Level 0~1 相关故事（前厅、宜居区）
+│   ├── l2_story.txt       ← Level 2 相关故事（管道梦魇）
+│   ├── l3_story.txt       ← Level 3 相关故事（电气站）
+│   ├── l4_story.txt       ← Level 4 相关故事（废弃办公室）
+│   ├── l5_story.txt       ← Level 5 相关故事（恐怖旅馆）
+│   ├── l6_story.txt       ← Level 6 相关故事（熄灯）
+│   ├── l7_story.txt       ← Level 7 相关故事（深海恐惧）
+│   ├── l8_story.txt       ← Level 8 相关故事（洞穴系统）
+│   ├── l9_story.txt       ← Level 9 相关故事（暗黑郊区）
+│   ├── l10_story.txt      ← Level 10 相关故事（丰收之景）
+│   └── l11_story.txt      ← Level 11 相关故事（无尽城市）
 ├── plugin.py
 ├── config.py
-├── story.py           ← 故事加载逻辑（自动发现所有 l*_story.txt）
+├── story.py           ← 故事加载逻辑（自动发现 level_story/ 下所有 l*_story.txt）
 └── ...
 ```
 
@@ -352,7 +353,7 @@ backrooms_escape/
 不需要转义，直接写中文即可。
 ```
 
-也可以新建一个 `l12_story.txt`（或任意匹配 `l*_story.txt` 模式的文件），插件重载后会自动加载。
+也可以新建一个 `l12_story.txt`（或任意匹配 `l*_story.txt` 模式的文件）放入 `level_story/` 目录，插件重载后会自动加载。
 
 ### 如何修改现有故事
 

@@ -1,7 +1,7 @@
 """后室:逃出生天 — 故事/纸条模块
 
 在探索过程中，玩家有概率捡到带有后室背景故事的纸条。
-纸条内容从 l1_story.txt ~ l11_story.txt 文件中读取。
+纸条内容从 level_story/ 目录下的 l1_story.txt ~ l11_story.txt 文件中读取。
 """
 
 from __future__ import annotations
@@ -28,15 +28,9 @@ class StoryManager:
 
     def _load_all(self) -> None:
         """自动发现并加载所有 l*_story.txt 文件。"""
-        base_dir = os.path.dirname(__file__)
+        base_dir = os.path.join(os.path.dirname(__file__), "level_story")
         pattern = os.path.join(base_dir, "l*_story.txt")
         story_files = sorted(glob.glob(pattern))
-
-        if not story_files:
-            # 兜底：尝试加载 l1_story.txt
-            fallback = os.path.join(base_dir, "l1_story.txt")
-            if os.path.isfile(fallback):
-                story_files = [fallback]
 
         for file_path in story_files:
             self._load_file(file_path)
