@@ -6,9 +6,8 @@
 
 from __future__ import annotations
 
-import glob
-import os
 import random
+from pathlib import Path
 from typing import Optional
 
 
@@ -28,15 +27,14 @@ class PeopleStoryManager:
 
     def _load_all(self) -> None:
         """自动发现并加载 people_story/ 下所有 .txt 文件。"""
-        base_dir = os.path.join(os.path.dirname(__file__), "people_story")
-        if not os.path.isdir(base_dir):
+        base_dir = Path(__file__).parent / "people_story"
+        if not base_dir.is_dir():
             return
-        pattern = os.path.join(base_dir, "*.txt")
-        story_files = sorted(glob.glob(pattern))
+        story_files = sorted(base_dir.glob("*.txt"))
 
         for file_path in story_files:
-            char_id = os.path.splitext(os.path.basename(file_path))[0]
-            self._load_file(char_id, file_path)
+            char_id = file_path.stem
+            self._load_file(char_id, str(file_path))
 
     def _load_file(self, char_id: str, file_path: str) -> None:
         """加载单个角色剧情文件。
@@ -45,11 +43,11 @@ class PeopleStoryManager:
             char_id: 角色 ID（文件名不含扩展名）。
             file_path: 剧情文件的完整路径。
         """
-        if not os.path.isfile(file_path):
+        fp = Path(file_path)
+        if not fp.is_file():
             return
 
-        with open(file_path, encoding="utf-8") as f:
-            raw = f.read()
+        raw = fp.read_text(encoding="utf-8")
 
         parts = raw.split(self.SEPARATOR)
         stories: list[str] = []
@@ -106,12 +104,13 @@ class StoryManager:
 
     def _load_all(self) -> None:
         """自动发现并加载所有 l*_story.txt 文件。"""
-        base_dir = os.path.join(os.path.dirname(__file__), "level_story")
-        pattern = os.path.join(base_dir, "l*_story.txt")
-        story_files = sorted(glob.glob(pattern))
+        base_dir = Path(__file__).parent / "level_story"
+        if not base_dir.is_dir():
+            return
+        story_files = sorted(base_dir.glob("l*_story.txt"))
 
         for file_path in story_files:
-            self._load_file(file_path)
+            self._load_file(str(file_path))
 
     def _load_file(self, file_path: str) -> None:
         """加载单个故事文本文件。
@@ -119,11 +118,11 @@ class StoryManager:
         Args:
             file_path: 故事文件的完整路径。
         """
-        if not os.path.isfile(file_path):
+        fp = Path(file_path)
+        if not fp.is_file():
             return
 
-        with open(file_path, encoding="utf-8") as f:
-            raw = f.read()
+        raw = fp.read_text(encoding="utf-8")
 
         parts = raw.split(self.SEPARATOR)
         for part in parts:

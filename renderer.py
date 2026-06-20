@@ -124,7 +124,7 @@ class BackroomsRenderer:
             "你是 M.E.G.CN（探险者总署中文分部）的一名工作人员。\n"
             "你被困在了后室之中，必须找到通往 Level 399 的最终出口才能回到现实世界。\n\n"
             "📋 可用命令：\n"
-            "  /br teststory — 查看后室背景故事\n"
+            "  /br story — 查看后室背景故事\n"
             "  /br test       — 插件连通性测试\n"
             "  /br explore    — 探索当前楼层\n"
             "  /br exit     — 尝试寻找出口\n"
@@ -161,7 +161,7 @@ class BackroomsRenderer:
             # 节点 3：命令列表
             (
                 "📋 可用命令：\n\n"
-                "  /br teststory — 查看后室背景故事\n"
+                "  /br story — 查看后室背景故事\n"
                 "  /br test      — 插件连通性测试\n"
                 "  /br explore   — 探索当前楼层\n"
                 "  /br exit      — 尝试寻找出口\n"
@@ -213,22 +213,22 @@ class BackroomsRenderer:
         self,
         ctx: RenderContext,
         event_text: str,
-        item_found: dict | None,
+        crate_result: tuple[str, list[dict]] | None,
         health_cost: int | None,
         note_found: bool,
         entity_encounter: tuple[str, dict, int] | None,
-        char_encounter: tuple[str, str] | None = None,
+        char_encounter: tuple[str, str, str | None] | None = None,
     ) -> str:
         """探索结果消息。
 
         Args:
             ctx: 渲染上下文。
             event_text: 探索事件文本。
-            item_found: 发现的物品数据（None 表示没找到）。
+            crate_result: (箱型名称, 物品列表) 或 None。
             health_cost: 事件造成的生命值伤害（None 表示无伤害）。
             note_found: 是否发现了纸条。
             entity_encounter: (实体名, 实体数据, 实际伤害) 或 None。
-            char_encounter: (角色ID, 剧情文本) 或 None。
+            char_encounter: (角色ID, 剧情文本, 赠送文本) 或 None。
         """
         lines = [f"🔍 你在 {ctx.level_info['title']} 中探索……"]
 
@@ -237,10 +237,13 @@ class BackroomsRenderer:
         else:
             lines.append(event_text)
 
-        if item_found:
-            lines.append(
-                f"🎒 你获得了：【{item_found['display_name']}】— {item_found['description']}"
-            )
+        if crate_result:
+            crate_size, crate_items = crate_result
+            lines.append(f"📦 你发现了一个【{crate_size}】！")
+            for it in crate_items:
+                lines.append(
+                    f"🎒 获得：【{it['display_name']}】— {it['description']}"
+                )
 
         if health_cost is not None and health_cost > 0:
             lines.append(
@@ -266,7 +269,7 @@ class BackroomsRenderer:
 
         # 角色遭遇
         if char_encounter:
-            char_id, story_text = char_encounter
+            char_id, story_text, char_gift = char_encounter
             if char_id == "ankexin":
                 lines.append("\n═════ 你在 Alpha 基地遇到了安可欣 ═════")
                 lines.append("")
@@ -279,6 +282,8 @@ class BackroomsRenderer:
                 lines.append(story_text)
                 lines.append("")
                 lines.append("═══════════════════════════════════")
+            if char_gift:
+                lines.append(char_gift)
 
         # 理智值过低
         warn = self.low_sanity_warning(ctx.sanity)
@@ -338,7 +343,7 @@ class BackroomsRenderer:
         ctx: RenderContext,
         exit_attempts: int,
         event_text: str,
-        item_found: dict | None,
+        crate_result: tuple[str, list[dict]] | None,
         health_cost: int | None,
         note_found: bool,
     ) -> str:
@@ -355,10 +360,13 @@ class BackroomsRenderer:
         else:
             lines.append(f"\n{event_text}")
 
-        if item_found:
-            lines.append(
-                f"🎒 你获得了：【{item_found['display_name']}】"
-            )
+        if crate_result:
+            crate_size, crate_items = crate_result
+            lines.append(f"\n📦 你发现了一个【{crate_size}】！")
+            for it in crate_items:
+                lines.append(
+                    f"🎒 获得：【{it['display_name']}】"
+                )
 
         if health_cost is not None and health_cost > 0:
             lines.append(f"💔 生命值 -{health_cost}")
@@ -411,7 +419,7 @@ class BackroomsRenderer:
             "══════════════════════\n\n"
             "🎯 游戏目标：从 Level 0 出发，一路寻找出口，到达 Level 399 逃出后室。\n\n"
             "📋 命令列表：\n"
-            "  /br teststory — 以转发消息查看后室背景故事\n"
+            "  /br story — 以转发消息查看后室背景故事\n"
             "  /br test      — 测试插件连通性（验证插件是否正常）\n"
             "  /br start     — 开始新游戏\n"
             "  /br explore    — 探索当前楼层（消耗5理智，可能遇敌/发现物品/捡到纸条）\n"

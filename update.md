@@ -1,3 +1,25 @@
+## v1.0.2 (2026-06-20)
+
+### 新增
+- `/br say` 命令：随机输出一句名人名言
+- `/br off` 命令：管理员关闭插件，关闭后仅管理员可用
+- `/br on` 命令：管理员重新启用插件
+- 首次遇到安可欣或安继年时，对方赠送 **2 瓶杏仁水**（自动收入背包，仅首次触发）
+
+### 变更
+- 补给品系统改为**物资箱系统**：探索时产生大、中、小三种物资箱，杏仁水出现概率分别为 100%、80%、60%，同时附带一件随机物品
+- 物资箱概率可在 `config.toml` 独立配置（`crate_large_chance`、`crate_medium_chance`、`crate_small_chance`）
+- `supply_find_chance` 配置项废弃
+- 手电筒驱散范围扩展：携带手电筒时同时可驱散**笑魇**与**猎犬**，使二者攻击无效化
+- 寻找出口理智消耗从 10 点调整为 **5 点**
+- 基础出口概率从 40% 调整为 **20%**
+- Level 11 特殊出口：在 Level 11 找到出口后直接跳转至 **Level 399** 通关
+- `/br teststory` 更名为 `/br story`
+- `config_other/people_story.txt` 重命名为 `people_relationship.txt`，删去独立人物关系区块，关系信息嵌入各自人物卡
+
+### 修复
+- 修复故事纸条无法加载的 bug：`story.py` 路径解析改用 `Path(__file__).parent`，移除 `os.path` 相对路径依赖
+
 ## v1.0.1 (2026-06-19)
 
 ### 新增
@@ -6,9 +28,8 @@
 - 防 planner 钩子：`br_skip_planner` 确保命令处理后不会进入 LLM/Planner 处理链
 - 人物剧情系统：`people_story/` 目录，可加载自定义角色剧情文件（`===CHARACTER_NNN===` 分隔）
 - Level 1 Alpha 基地特殊事件：40% 概率在探索时遇到角色（安可欣、安继年）
-- `/br people_net` 命令：查看已解锁人物关系图（数据来自 `config_other/people_story.txt`）
-- `/br say` 命令：随机输出一句名人名言
-- `config_other/people_story.txt`：人物关系配置文件，记录安可欣与安继年的姐弟关系
+- `/br people_net` 命令：查看已解锁人物关系图（数据来自 `config_other/people_relationship.txt`）
+- `config_other/people_relationship.txt`：人物关系配置文件，记录安可欣与安继年的姐弟关系
 - 角色解锁系统：遭遇角色后自动解锁，仅已解锁角色会显示在人物关系图中
 - 存档系统新增 `unlocked_chars` 字段，角色解锁状态持久化到 JSON
 - 消息回复渲染器 (`renderer.py`)：将消息格式化逻辑从 `plugin.py` 解耦，使用 `RenderContext` 封装渲染上下文
@@ -24,7 +45,7 @@
   - 调整为 22 岁龙凤胎姐弟设定，互称"安安"/"可欣"
   - 安可欣全篇融入对弟弟的提及（搜救、暖泉区、工作锚点等）
   - 安继年全篇使用"可欣"称呼，去除不符设定的表述
-- `config_other/people_story.txt` 补充年龄信息、关系更新为"龙凤胎姐弟"
+- `config_other/people_relationship.txt` 补充年龄信息、关系更新为"龙凤胎姐弟"
 - 插件名称统一改为"后室:逃出生天"（涉及 6 个文件共 19 处）
 - `_manifest.json` 格式对齐标准规范，移除 `plugin_type`、`display` 等非标准字段
 - `README.md` 精简为 96 行，原完整版另存为 `webreadme.md`

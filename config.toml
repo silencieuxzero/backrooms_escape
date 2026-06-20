@@ -12,21 +12,26 @@ initial_sanity = 100
 # 每次探索所消耗的理智值（v1.0.1 后调整为 2）
 explore_sanity_cost = 2
 # 每次寻找出口所消耗的理智值
-exit_search_sanity_cost = 10
+exit_search_sanity_cost = 5
 # 成功找到出口的基础概率 (0.0 ~ 1.0)
-base_exit_chance = 0.4
+base_exit_chance = 0.2
 # 每次寻找失败后成功概率的提升值
 exit_chance_increment = 0.1
 # 在楼层中遭遇实体的基础概率
 entity_encounter_chance = 0.25
-# 探索时发现补给品的概率
-supply_find_chance = 0.3
+
+# ---- 物资箱概率 ----
+# 触发补给事件时各类物资箱的出现概率
+# 大型箱：必出杏仁水；中型箱：80% 出杏仁水；小型箱：60% 出杏仁水
+crate_large_chance = 0.08
+crate_medium_chance = 0.15
+crate_small_chance = 0.25
 
 # ---- 各物品获取权重（权重越高，获得概率越大） ----
 # 物品           默认权重  说明
 # o1 (杏仁水)     3       恢复 30 点理智值
 # o2 (急救包)     3       恢复 30 点生命值
-# o3 (手电筒)     2       驱散笑魇，+5% 出口率
+# o3 (手电筒)     2       驱散笑魇和猎犬，+5% 出口率
 # o4 (层级钥匙)   1       100% 找到出口（稀有）
 # o5 (无线电)     2       +5% 出口率
 # o6 (能量棒)     2       恢复 15 点生命值

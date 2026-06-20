@@ -344,6 +344,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._story_manager = StoryManager()
         self._people_manager = PeopleStoryManager()
         self._renderer = BackroomsRenderer()
+        self._plugin_disabled: bool = False
+        self._admin_id: str = ""
 
         # 创建持久化数据目录
         self._data_dir = Path(__file__).parent / "br_data"
@@ -356,6 +358,13 @@ class BackroomsGamePlugin(MaiBotPlugin):
         # 恢复已有玩家存档
         self._load_all_players()
         self.ctx.logger.info("已从 br_data 恢复 %d 位玩家存档", len(self._players))
+
+        # 输出故事加载状态
+        self.ctx.logger.info(
+            "故事纸条已加载 %d 条, 人物剧情: %s",
+            self._story_manager.story_count,
+            {cid: self._people_manager.get_story_count(cid) for cid in self._people_manager.character_ids},
+        )
 
         # 输出访问控制状态，便于排查私聊不可用问题
         wl = self.config.whitelist
@@ -408,11 +417,11 @@ class BackroomsGamePlugin(MaiBotPlugin):
         return True, "插件连通性测试通过", 1
 
     @Command(
-        "br_teststory",
-        description="查看后室背景故事 — M.E.G.CN 加密档案（同时测试转发消息功能）",
-        pattern=r"^/br\s+teststory$",
+        "br_story",
+        description="查看后室背景故事 — M.E.G.CN 加密档案",
+        pattern=r"^/br\s+story$",
     )
-    async def handle_teststory(self, **kwargs: Any):
+    async def handle_story(self, **kwargs: Any):
         """用 NapCat 合并转发消息展示后室档案。"""
         stream_id = kwargs.get("stream_id", "")
 
@@ -619,6 +628,30 @@ class BackroomsGamePlugin(MaiBotPlugin):
         stream_id = kwargs.get("stream_id", "")
         await self._do_say(stream_id)
         return True, "名言已发送", 1
+
+    @Command(
+        "br_off",
+        description="管理员关闭插件 — 拒绝除管理员外的所有用户使用",
+        pattern=r"^/br\s+off$",
+    )
+    async def handle_off(self, **kwargs: Any):
+        """管理员关闭插件。"""
+        stream_id = kwargs.get("stream_id", "")
+        message = kwargs.get("message", {})
+        await self._do_off(stream_id, message)
+        return True, "插件关闭处理完成", 1
+
+    @Command(
+        "br_on",
+        description="管理员重新启用插件",
+        pattern=r"^/br\s+on$",
+    )
+    async def handle_on(self, **kwargs: Any):
+        """管理员重新启用插件。"""
+        stream_id = kwargs.get("stream_id", "")
+        message = kwargs.get("message", {})
+        await self._do_on(stream_id, message)
+        return True, "插件启用处理完成", 1
 
     # ==================== 访问控制拦截 ====================
 
@@ -843,6 +876,17 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 await self.ctx.send.text(f"🚫 {reason}", stream_id)
             return {"action": "abort"}
 
+        # 插件禁用检查：禁用状态下仅管理员可继续使用
+        if self._plugin_disabled:
+            if command_name not in ("br_off", "br_on") and user_id != self._admin_id:
+                self.ctx.logger.info(
+                    "access_check: 插件已禁用，拒绝非管理员 user_id=%s command_name=%s",
+                    user_id, command_name,
+                )
+                if stream_id:
+                    await self.ctx.send.text("🚫 插件已由管理员关闭。", stream_id)
+                return {"action": "abort"}
+
         return {"action": "continue"}
 
     @HookHandler(
@@ -1066,6 +1110,50 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 return ITEMS_POOL[i]
         return ITEMS_POOL[-1]
 
+    def _roll_crate(self, player: PlayerState) -> tuple[str, list[dict]] | None:
+        """物资箱系统：根据配置概率和当前楼层生成物资箱。
+
+        Args:
+            player: 玩家状态（用于判断是否在 Level 0）。
+
+        Returns:
+            (箱型名称, 物品列表) 或 None（无物资箱）。
+            箱型名称: "大型物资箱" / "中型物资箱" / "小型物资箱"
+        """
+        if player.current_level == 0:
+            return None
+
+        cfg = self.config.game
+
+        # 确定箱型
+        r = random.random()
+        crate_size: str | None = None
+        if r < cfg.crate_large_chance:
+            crate_size = "大型物资箱"
+        elif r < cfg.crate_large_chance + cfg.crate_medium_chance:
+            crate_size = "中型物资箱"
+        elif r < cfg.crate_large_chance + cfg.crate_medium_chance + cfg.crate_small_chance:
+            crate_size = "小型物资箱"
+
+        if crate_size is None:
+            return None
+
+        # 杏仁水概率
+        almond_chance = {"大型物资箱": 1.0, "中型物资箱": 0.8, "小型物资箱": 0.6}[crate_size]
+
+        items: list[dict] = []
+        if random.random() < almond_chance:
+            almond_water = {"name": "o1", "type": "consumable", "effect": "sanity_restore", "value": 30,
+                            "display_name": "杏仁水",
+                            "description": "后室中最常见的补给品，喝下可以恢复理智，味道像融化的杏仁冰淇淋。"}
+            items.append(dict(almond_water))
+
+        # 额外随机物品（使用权重系统）
+        extra = self._random_item()
+        items.append(dict(extra))
+
+        return crate_size, items
+
     def _format_inventory(self, player: PlayerState) -> str:
         """格式化背包内容。"""
         if not player.inventory:
@@ -1154,15 +1242,17 @@ class BackroomsGamePlugin(MaiBotPlugin):
         # 随机事件
         event = random.choice(EXPLORE_EVENTS)
         event_text = event["text"]
-        item_found: dict | None = None
+        crate_result: tuple[str, list[dict]] | None = None
         health_cost: int | None = None
         note_found = False
 
         if event["type"] == "discovery":
             if event.get("give_item"):
-                if random.random() < cfg.supply_find_chance:
-                    item_found = self._random_item()
-                    player.inventory.append(item_found)
+                crate_result = self._roll_crate(player)
+                if crate_result:
+                    _, crate_items = crate_result
+                    for it in crate_items:
+                        player.inventory.append(it)
                 else:
                     event_text += "……但里面已经空了。"
         elif event["type"] == "danger":
@@ -1201,7 +1291,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 entity_encounter = (entity_name, entity_data, edamage)
 
         # Level 1 特殊：在 M.E.G.CN Alpha 基地遇到角色
-        char_encounter: tuple[str, str] | None = None
+        char_encounter: tuple[str, str, str | None] | None = None
         if player.current_level == 1:
             level1_chars = [cid for cid in ("ankexin", "anjinian")
                             if self._people_manager.get_story_count(cid) > 0]
@@ -1209,7 +1299,16 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 char_id = random.choice(level1_chars)
                 story_text = self._people_manager.get_random_story(char_id)
                 if story_text:
-                    char_encounter = (char_id, story_text)
+                    # 首次遇到角色：赠送 2 瓶杏仁水
+                    char_gift: str | None = None
+                    if char_id not in player.unlocked_chars:
+                        almond_water = {"name": "o1", "type": "consumable", "effect": "sanity_restore", "value": 30,
+                                        "display_name": "杏仁水",
+                                        "description": "后室中最常见的补给品，喝下可以恢复理智，味道像融化的杏仁冰淇淋。"}
+                        player.inventory.append(dict(almond_water))
+                        player.inventory.append(dict(almond_water))
+                        char_gift = "🎁 对方给了你 2 瓶杏仁水作为见面礼。"
+                    char_encounter = (char_id, story_text, char_gift)
                     player.unlocked_chars.add(char_id)
 
         # 理智值过低效果
@@ -1225,7 +1324,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         ctx = self._make_ctx(player)
         await self._send(
             stream_id,
-            self._renderer.render_explore(ctx, event_text, item_found, health_cost, note_found, entity_encounter, char_encounter),
+            self._renderer.render_explore(ctx, event_text, crate_result, health_cost, note_found, entity_encounter, char_encounter),
         )
         self._save_player(user_id)
 
@@ -1266,6 +1365,19 @@ class BackroomsGamePlugin(MaiBotPlugin):
             # 找到出口
             player.exit_attempts = 0
             from_level = player.current_level
+
+            # Level 11 特殊：找到出口直接前往 Level 399
+            if from_level == 11:
+                player.current_level = 399
+                ctx = self._make_ctx(player)
+                await self._send(
+                    stream_id,
+                    self._renderer.render_level399_escape(from_level + 1),
+                )
+                del self._players[user_id]
+                self._delete_player_save(user_id)
+                return
+
             shortcut_desc: str | None = None
 
             level_info = self._get_level_info(player.current_level)
@@ -1299,14 +1411,16 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
             event = random.choice(EXPLORE_EVENTS)
             event_text = event["text"]
-            ex_item_found: dict | None = None
+            ex_crate_result: tuple[str, list[dict]] | None = None
             ex_health_cost: int | None = None
             ex_note_found = False
 
             if event.get("give_item"):
-                if random.random() < cfg.supply_find_chance:
-                    ex_item_found = self._random_item()
-                    player.inventory.append(ex_item_found)
+                ex_crate_result = self._roll_crate(player)
+                if ex_crate_result:
+                    _, ex_crate_items = ex_crate_result
+                    for it in ex_crate_items:
+                        player.inventory.append(it)
                 else:
                     event_text += "……但里面已经空了。"
             if "health_cost" in event:
@@ -1332,7 +1446,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 stream_id,
                 self._renderer.render_exit_not_found(
                     ctx, player.exit_attempts, event_text,
-                    ex_item_found, ex_health_cost, ex_note_found,
+                    ex_crate_result, ex_health_cost, ex_note_found,
                 ),
             )
 
@@ -1404,6 +1518,45 @@ class BackroomsGamePlugin(MaiBotPlugin):
             stream_id,
             f"══ 名人名言 ══\n\n{quote}",
         )
+
+    async def _do_off(self, stream_id: str, message: dict) -> None:
+        """关闭插件：仅管理员可用，禁用后仅管理员可继续使用。"""
+        user_id = self._resolve_user_id(message, stream_id)
+        if not user_id:
+            await self._send(stream_id, "❌ 无法识别你的身份，不能执行此操作。")
+            return
+
+        # 首次关闭：设定管理员
+        if not self._admin_id:
+            self._admin_id = user_id
+            self._plugin_disabled = True
+            self.ctx.logger.info("插件已关闭，管理员 user_id=%s", user_id)
+            await self._send(stream_id, "🔒 插件已关闭。现在只有你可以使用本插件。")
+            return
+
+        # 已有管理员：验证身份
+        if user_id != self._admin_id:
+            await self._send(stream_id, "❌ 你不是管理员，无权关闭插件。")
+            return
+
+        self._plugin_disabled = True
+        self.ctx.logger.info("插件已由管理员重新关闭 user_id=%s", user_id)
+        await self._send(stream_id, "🔒 插件已关闭。")
+
+    async def _do_on(self, stream_id: str, message: dict) -> None:
+        """重新启用插件：仅管理员可用。"""
+        user_id = self._resolve_user_id(message, stream_id)
+        if not user_id:
+            await self._send(stream_id, "❌ 无法识别你的身份，不能执行此操作。")
+            return
+
+        if user_id != self._admin_id:
+            await self._send(stream_id, "❌ 你不是管理员，无权启用插件。")
+            return
+
+        self._plugin_disabled = False
+        self.ctx.logger.info("插件已由管理员重新启用 user_id=%s", user_id)
+        await self._send(stream_id, "🔓 插件已重新启用，所有用户均可使用。")
 
 
 def create_plugin() -> BackroomsGamePlugin:
