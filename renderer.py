@@ -79,13 +79,13 @@ class BackroomsRenderer:
     @staticmethod
     def low_sanity_warning(sanity: int) -> str | None:
         if sanity <= 20:
-            return "😰 你的理智值很低了！使用 /br use <编号> 使用背包中的恢复物品。"
+            return "😰 你的理智值很低了！使用 /br inventory <编号> 使用背包中的恢复物品。"
         return None
 
     @staticmethod
     def low_health_warning(health: int, initial_health: int) -> str | None:
         if health <= 30:
-            return "   提示：生命值危险，可使用 /br use <编号> 使用背包中的恢复物品。"
+            return "   提示：生命值危险，可使用 /br inventory <编号> 使用背包中的恢复物品。"
         return None
 
     @staticmethod
@@ -129,9 +129,9 @@ class BackroomsRenderer:
             "  /br explore    — 探索当前楼层\n"
             "  /br exit     — 尝试寻找出口\n"
             "  /br read     — 阅读纸条\n"
-            "  /br use <编号> — 使用背包中对应编号的物品\n"
+            "  /br inventory — 查看背包或使用物品\n"
+            "  /br inventory <编号> — 使用背包中对应编号的物品\n"
             "  /br status   — 查看当前状态\n"
-            "  /br inventory — 查看背包\n"
             "  /br help     — 游戏帮助\n\n"
             "祝你好运，探员。"
         )
@@ -166,9 +166,9 @@ class BackroomsRenderer:
                 "  /br explore   — 探索当前楼层\n"
                 "  /br exit      — 尝试寻找出口\n"
                 "  /br read      — 阅读纸条\n"
-                "  /br use <编号> — 使用背包中对应编号的物品\n"
+                "  /br inventory — 查看背包或使用物品\n"
+                "  /br inventory <编号> — 使用背包中对应编号的物品\n"
                 "  /br status    — 查看当前状态\n"
-                "  /br inventory — 查看背包\n"
                 "  /br help      — 游戏帮助\n\n"
                 "祝你好运，探员。"
             ),
@@ -426,8 +426,7 @@ class BackroomsRenderer:
             "  /br exit       — 尝试寻找出口（消耗10理智，每次失败增加成功概率）\n"
             "  /br read       — 阅读捡到的纸条（通过合并转发消息展示）\n"
             "  /br status     — 查看探员状态\n"
-            "  /br inventory  — 查看背包\n"
-            "  /br use <编号> — 使用背包中的物品（如 /br use 1）\n"
+            "  /br inventory  — 查看背包或使用物品（/br inventory <编号> 使用物品）\n"
             "  /br help       — 显示此帮助\n"
             "  /br people_net — 已解锁人物关系图\n\n"
             "⚙️ 游戏机制：\n"
@@ -521,7 +520,7 @@ class BackroomsRenderer:
         return f"背包中没有编号为 {item_index} 的物品。使用 /br inventory 查看背包中的物品编号。"
 
     def render_no_item_specified(self) -> str:
-        return "请指定要使用的物品编号，如：/br use 1"
+        return "请指定要使用的物品编号，如：/br inventory 1"
 
     def render_already_at_399(self) -> str:
         return "你已经到达 Level 399——最终出口！\n使用 /br exit 尝试推开那扇门吧。"

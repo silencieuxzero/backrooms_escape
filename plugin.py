@@ -21,10 +21,10 @@ from .renderer import BackroomsRenderer, RenderContext
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.0.4"
+PLUGIN_VERSION = "1.0.5"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.0.4"
+SAVE_VERSION = "1.0.5"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -603,31 +603,20 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     @Command(
         "br_inventory",
-        description="查看背包 — 显示携带的物品",
-        pattern=r"^/br\s+inventory$",
+        description="查看背包 / 使用物品 — 显示携带的物品，或使用 /br inventory <编号> 消耗物品",
+        pattern=r"^/br\s+inventory(?:\s+(\d+))?$",
     )
     async def handle_inventory(self, **kwargs: Any):
-        """查看背包。"""
-        stream_id = kwargs.get("stream_id", "")
-        await self._do_inventory(stream_id)
-        return True, "背包已显示", 1
-
-    @Command(
-        "br_use",
-        description="使用物品 — 消耗背包中的物品（按编号）",
-        pattern=r"^/br\s+use\s+(\d+)$",
-    )
-    async def handle_use(self, **kwargs: Any):
-        """使用背包物品。"""
+        """查看背包或使用物品。"""
         stream_id = kwargs.get("stream_id", "")
         match_result = kwargs.get("match_result")
-        if not match_result:
-            await self._send(stream_id, self._renderer.render_no_item_specified())
-            return True, "未指定物品", 1
-
-        item_index = int(match_result.group(1))
-        await self._do_use(stream_id, item_index)
-        return True, f"物品 {item_index} 使用完成", 1
+        # group(1) 存在时表示是 /br inventory <编号>，执行使用逻辑
+        if match_result and match_result.group(1):
+            item_index = int(match_result.group(1))
+            await self._do_use_item(stream_id, item_index)
+        else:
+            await self._do_show_inventory(stream_id)
+        return True, "背包操作完成", 1
 
     @Command(
         "br_help",
@@ -1268,7 +1257,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         ]
         await self._send(stream_id, "", nodes=nodes)
 
-    async def _do_use(self, stream_id: str, item_index: int) -> None:
+    async def _do_use_item(self, stream_id: str, item_index: int) -> None:
         """使用背包物品（按编号）。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
@@ -1549,7 +1538,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             self._renderer.render_status(ctx, inventory_text),
         )
 
-    async def _do_inventory(self, stream_id: str) -> None:
+    async def _do_show_inventory(self, stream_id: str) -> None:
         """查看背包。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
@@ -1563,9 +1552,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if self._has_item(player, "o4"):
             hints.append("🔑 你持有层级钥匙！使用 /br exit 可以 100% 找到出口。")
         if self._has_item(player, "o1") and player.sanity < 50:
-            hints.append("🧠 理智值偏低，使用 /br use <编号> 可以恢复，在背包中查看对应编号。")
+            hints.append("🧠 理智值偏低，使用 /br inventory <编号> 可以恢复。")
         if self._has_item(player, "o2") and player.health < 50:
-            hints.append("❤️ 生命值偏低，使用 /br use <编号> 派得上用场。")
+            hints.append("❤️ 生命值偏低，使用 /br inventory <编号> 派得上用场。")
         if self._has_item(player, "o3"):
             hints.append("🔦 手电筒能驱散笑魇，+5% 出口发现率。")
 

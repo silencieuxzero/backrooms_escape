@@ -4,7 +4,7 @@ enabled = true
 output_mode = "text"
 # 管理员QQ号（留空则由首个使用 /br off 的用户自动成为管理员）
 admin_id = ""
-config_version = "1.0.4"
+config_version = "1.0.5"
 
 [game]
 # 初始生命值
