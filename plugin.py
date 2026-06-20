@@ -572,26 +572,18 @@ class BackroomsGamePlugin(MaiBotPlugin):
     @Command(
         "br_use",
         description="使用物品 — 按背包编号消耗物品",
-        pattern=r"^/br\s+use\s+(\d+)$",
+        pattern=r"^/br\s+use\s+(?P<index>\d+)$",
     )
     async def handle_use(self, **kwargs: Any):
         """使用背包物品。"""
         stream_id = kwargs.get("stream_id", "")
-
-        # SDK 的 match_result 不可靠，从原始消息文本手动提取编号
-        message = kwargs.get("message", {})
-        raw_text = str(
-            message.get("raw_message")
-            or message.get("text")
-            or message.get("message")
-            or ""
-        )
-        m = re.search(r"/br\s+use\s+(\d+)\s*$", raw_text)
-        if not m:
+        matched = kwargs.get("matched_groups", {})
+        index_str = matched.get("index", "")
+        if not index_str:
             await self._send(stream_id, self._renderer.render_no_item_specified())
             return True, "未指定物品", 1
 
-        item_index = int(m.group(1))
+        item_index = int(index_str)
         await self._do_use_item(stream_id, item_index)
         return True, f"物品 {item_index} 已使用", 1
 
