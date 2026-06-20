@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -604,19 +605,31 @@ class BackroomsGamePlugin(MaiBotPlugin):
     @Command(
         "br_inventory",
         description="查看背包 / 使用物品 — 显示携带的物品，或使用 /br inventory <编号> 消耗物品",
-        pattern=r"^/br\s+inventory(?:\s+(\d+))?$",
+        pattern=r"^/br\s+inventory",
     )
     async def handle_inventory(self, **kwargs: Any):
         """查看背包或使用物品。"""
+
         stream_id = kwargs.get("stream_id", "")
-        match_result = kwargs.get("match_result")
-        # group(1) 存在时表示是 /br inventory <编号>，执行使用逻辑
-        if match_result and match_result.group(1):
-            item_index = int(match_result.group(1))
+
+        # 从 message 字典中获取原始命令文本
+        message = kwargs.get("message", {})
+        raw_text = str(
+            message.get("raw_message")
+            or message.get("text")
+            or message.get("message")
+            or ""
+        )
+        # 尝试提取尾部的数字 → /br inventory <编号>
+        m = re.search(r"/br\s+inventory\s+(\d+)\s*$", raw_text)
+        if m:
+            item_index = int(m.group(1))
             await self._do_use_item(stream_id, item_index)
-        else:
-            await self._do_show_inventory(stream_id)
-        return True, "背包操作完成", 1
+            return True, f"物品 {item_index} 已使用", 1
+
+        # 无编号 → 显示背包
+        await self._do_show_inventory(stream_id)
+        return True, "背包已显示", 1
 
     @Command(
         "br_help",
