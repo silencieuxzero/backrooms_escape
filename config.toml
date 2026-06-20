@@ -4,7 +4,7 @@ enabled = true
 output_mode = "text"
 # 管理员QQ号（留空则由首个使用 /br off 的用户自动成为管理员）
 admin_id = ""
-config_version = "1.0.7"
+config_version = "1.0.8"
 
 [game]
 # 初始生命值
@@ -21,6 +21,10 @@ base_exit_chance = 0.2
 exit_chance_increment = 0.1
 # 在楼层中遭遇实体的基础概率
 entity_encounter_chance = 0.25
+# 遇到安可欣时获得任务的概率（默认 50%，取值范围 0.0 ~ 1.0）
+ankexin_task_chance = 0.5
+# 在 Level 1 每探索多少次触发一次安可欣的日常工作任务（默认 10）
+work_trigger_interval = 10
 
 # ---- 物资箱概率 ----
 # 触发补给事件时各类物资箱的出现概率

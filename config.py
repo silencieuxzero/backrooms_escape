@@ -42,7 +42,7 @@ class PluginSectionConfig(PluginConfigBase):
         },
     )
     config_version: str = Field(
-        default="1.0.7",
+        default="1.0.8",
         description="配置版本（与插件版本同步）",
         json_schema_extra={
             "label": "配置版本",
@@ -130,6 +130,24 @@ class GameConfig(PluginConfigBase):
             "order": 6,
         },
     )
+    ankexin_task_chance: float = Field(
+        default=0.5,
+        description="遇到安可欣时获得任务的概率（0.0~1.0）",
+        json_schema_extra={
+            "label": "安可欣任务概率",
+            "hint": "在 Alpha 基地遇到安可欣时，她给你布置任务的概率，取值范围 0.0 ~ 1.0。",
+            "order": 7,
+        },
+    )
+    work_trigger_interval: int = Field(
+        default=10,
+        description="在 Level 1 每探索多少次触发一次安可欣的日常工作任务",
+        json_schema_extra={
+            "label": "日常任务触发间隔",
+            "hint": "在 Level 1 每探索多少次后，安可欣会主动给你派发一个新的基地日常工作任务。",
+            "order": 8,
+        },
+    )
     # ---- 物资箱概率 ----
     crate_large_chance: float = Field(
         default=0.08,
@@ -137,7 +155,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "大型物资箱概率",
             "hint": "触发补给事件时出现大型物资箱的概率。大型箱必出杏仁水。",
-            "order": 8,
+            "order": 9,
         },
     )
     crate_medium_chance: float = Field(
@@ -146,7 +164,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "中型物资箱概率",
             "hint": "触发补给事件时出现中型物资箱的概率。中型箱必出杏仁水。",
-            "order": 9,
+            "order": 10,
         },
     )
     crate_small_chance: float = Field(
@@ -155,7 +173,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "小型物资箱概率",
             "hint": "触发补给事件时出现小型物资箱的概率。小型箱必出杏仁水。",
-            "order": 10,
+            "order": 11,
         },
     )
 
@@ -166,7 +184,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "杏仁水权重",
             "hint": "发现补给品时获得杏仁水的权重，权重越高越常见。",
-            "order": 11,
+            "order": 12,
         },
     )
     item_weight_o2: int = Field(
@@ -175,7 +193,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "急救包权重",
             "hint": "发现补给品时获得急救包的权重，权重越高越常见。",
-            "order": 12,
+            "order": 13,
         },
     )
     item_weight_o3: int = Field(
@@ -184,7 +202,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "手电筒权重",
             "hint": "发现补给品时获得手电筒的权重，权重越高越常见。",
-            "order": 13,
+            "order": 14,
         },
     )
     item_weight_o4: int = Field(
@@ -193,7 +211,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "层级钥匙权重",
             "hint": "发现补给品时获得层级钥匙的权重，权重越高越常见。",
-            "order": 14,
+            "order": 15,
         },
     )
     item_weight_o5: int = Field(
@@ -202,7 +220,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "M.E.G. 无线电权重",
             "hint": "发现补给品时获得 M.E.G. 无线电的权重，权重越高越常见。",
-            "order": 15,
+            "order": 16,
         },
     )
     item_weight_o6: int = Field(
@@ -211,7 +229,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "能量棒权重",
             "hint": "发现补给品时获得能量棒的权重，权重越高越常见。",
-            "order": 16,
+            "order": 17,
         },
     )
     item_weight_o7: int = Field(
@@ -220,7 +238,7 @@ class GameConfig(PluginConfigBase):
         json_schema_extra={
             "label": "镇定剂权重",
             "hint": "发现补给品时获得镇定剂的权重，权重越高越常见。",
-            "order": 17,
+            "order": 18,
         },
     )
 

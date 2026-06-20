@@ -1,0 +1,63 @@
+{
+  "M001": {
+    "title": "初来乍到",
+    "description": "安可欣希望你熟悉后室的低层区域，探索到达 Level 5 后回来向她报告。",
+    "giver": "ankexin",
+    "giver_name": "安可欣",
+    "objective_type": "reach_level",
+    "objective_target": 5,
+    "reward_currency": 50,
+    "reward_items": [],
+    "reward_text": "50 M.E.G.CN 贡献点",
+    "submit_text": "你回到了 Alpha 基地休息区，安可欣正在那里整理文档。\n\n「你已经到过 Level 5 了？不错嘛，看来你适应得很快。」安可欣微笑着递给你一张贡献卡。\n\n「这是组织给积极探员的奖励积分。好好存着，以后能换不少好东西。」"
+  },
+  "M002": {
+    "title": "信号搜寻",
+    "description": "安可欣需要你帮忙收集一部还能用的 M.E.G. 无线电（o5），她在维修通讯阵列。",
+    "giver": "ankexin",
+    "giver_name": "安可欣",
+    "objective_type": "collect_item",
+    "objective_item": "o5",
+    "reward_currency": 80,
+    "reward_items": ["o2", "o2"],
+    "reward_text": "80 M.E.G.CN 贡献点 + 2个急救包",
+    "submit_text": "你把无线电交给了正在通讯室忙碌的安可欣。\n\n「太好了！这台还能用。」她快速接好线路，「这样我就能联系上前哨站了。来，这些急救包你拿着，后室里可不能少了这个。」"
+  },
+  "M003": {
+    "title": "深层探索",
+    "description": "安可欣希望你能探索到 Level 11（无尽城市），收集那里 M.E.G. 前哨站的情报。",
+    "giver": "ankexin",
+    "giver_name": "安可欣",
+    "objective_type": "reach_level",
+    "objective_target": 11,
+    "reward_currency": 150,
+    "reward_items": [],
+    "reward_text": "150 M.E.G.CN 贡献点",
+    "submit_text": "安可欣正在休息室里喝咖啡，看到你回来，眼睛一亮。\n\n「Level 11！那可是我们 M.E.G. 的重要据点了。你带来的情报很有价值。」\n\n她记录完你的报告后，拍拍你的肩膀。「干得漂亮，探员。继续深入的话，也许我们能一起找到后室的秘密。」"
+  },
+  "M004": {
+    "title": "紧急补给",
+    "description": "安可欣需要一批杏仁水和急救包（o1×2 + o2×1）给新来的切入者使用。",
+    "giver": "ankexin",
+    "giver_name": "安可欣",
+    "objective_type": "use_item",
+    "objective_item": "o1",
+    "objective_count": 2,
+    "reward_currency": 60,
+    "reward_items": ["o4"],
+    "reward_text": "60 M.E.G.CN 贡献点 + 1把层级钥匙",
+    "submit_text": "「你真是帮了大忙！」安可欣把物资清点完毕。「这些补给对新来的切入者来说是救命的东西。」\n\n她从抽屉里拿出一把钥匙。「这是层级钥匙，很稀有。我想你比我们更需要它——你不是要继续深入吗？」"
+  },
+  "M005": {
+    "title": "归途之旅",
+    "description": "安可欣给了你一个终极任务：活着逃出后室。当你通关后回来找她报告。",
+    "giver": "ankexin",
+    "giver_name": "安可欣",
+    "objective_type": "reach_level",
+    "objective_target": 399,
+    "reward_currency": 500,
+    "reward_items": [],
+    "reward_text": "500 M.E.G.CN 贡献点",
+    "submit_text": "安可欣简直不敢相信自己的眼睛。\n\n「你……你真的从 Level 399 回来了？」她的声音有些发颤。「那就是说，那扇门是真的存在的……真正的出口……」\n\n她握紧你的手。「谢谢你，探员。你给了我们所有人希望。我会把这次经历记录在 M.E.G.CN 档案的首页。」\n\n500 贡献点已到账。恭喜你完成了最艰难的任务。"
+  }
+}

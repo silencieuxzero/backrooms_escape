@@ -25,6 +25,7 @@ class RenderContext:
         inventory_count: int,
         game_config: GameConfig,
         level_info: dict[str, Any],
+        exit_attempts: int = 0,
     ) -> None:
         self.health = health
         self.sanity = sanity
@@ -34,6 +35,7 @@ class RenderContext:
         self.inventory_count = inventory_count
         self.cfg = game_config
         self.level_info = level_info
+        self.exit_attempts = exit_attempts
 
 
 # ==================== 渲染器 ====================
@@ -124,14 +126,16 @@ class BackroomsRenderer:
             "你是 M.E.G.CN（探险者总署中文分部）的一名工作人员。\n"
             "你被困在了后室之中，必须找到通往 Level 399 的最终出口才能回到现实世界。\n\n"
             "📋 可用命令：\n"
-            "  /br story — 查看后室背景故事\n"
-            "  /br test       — 插件连通性测试\n"
+            "  /br story     — 故事档案（查看已解锁的工作故事）\n"
+            "  /br test      — 插件连通性测试\n"
             "  /br explore    — 探索当前楼层\n"
             "  /br exit     — 尝试寻找出口\n"
             "  /br read     — 阅读纸条\n"
             "  /br use <编号> — 使用背包中对应编号的物品\n"
             "  /br status   — 查看当前状态\n"
             "  /br inventory — 查看背包\n"
+            "  /br quest    — 查看任务面板\n"
+            "  /br work     — Alpha 基地工作（解谜）\n"
             "  /br help     — 游戏帮助\n\n"
             "祝你好运，探员。"
         )
@@ -161,7 +165,7 @@ class BackroomsRenderer:
             # 节点 3：命令列表
             (
                 "📋 可用命令：\n\n"
-                "  /br story — 查看后室背景故事\n"
+                "  /br story     — 故事档案（查看已解锁的工作故事）\n"
                 "  /br test      — 插件连通性测试\n"
                 "  /br explore   — 探索当前楼层\n"
                 "  /br exit      — 尝试寻找出口\n"
@@ -169,6 +173,8 @@ class BackroomsRenderer:
                 "  /br use <编号> — 使用背包中对应编号的物品\n"
                 "  /br status    — 查看当前状态\n"
                 "  /br inventory — 查看背包\n"
+                "  /br quest     — 查看任务面板\n"
+                "  /br work      — Alpha 基地工作（解谜）\n"
                 "  /br help      — 游戏帮助\n\n"
                 "祝你好运，探员。"
             ),
@@ -215,7 +221,9 @@ class BackroomsRenderer:
         health_cost: int | None,
         note_found: bool,
         entity_encounter: tuple[str, dict, int] | None,
-        char_encounter: tuple[str, str, str | None] | None = None,
+        char_encounter: tuple[str, str, str | None, str | None] | None = None,
+        work_triggered: bool = False,
+        work_assigned: tuple[str, str] | None = None,
     ) -> str:
         """探索结果消息。
 
@@ -226,7 +234,9 @@ class BackroomsRenderer:
             health_cost: 事件造成的生命值伤害（None 表示无伤害）。
             note_found: 是否发现了纸条。
             entity_encounter: (实体名, 实体数据, 实际伤害) 或 None。
-            char_encounter: (角色ID, 剧情文本, 赠送文本) 或 None。
+            char_encounter: (角色ID, 剧情文本, 赠送文本, 任务ID) 或 None。
+            work_triggered: 是否有新的基地工作可用。
+            work_assigned: (工作ID, 工作标题) — 安可欣主动派发的日常工作任务。
         """
         lines = [f"🔍 你在 {ctx.level_info['title']} 中探索……"]
 
@@ -267,7 +277,7 @@ class BackroomsRenderer:
 
         # 角色遭遇
         if char_encounter:
-            char_id, story_text, char_gift = char_encounter
+            char_id, story_text, char_gift, quest_offer = char_encounter
             if char_id == "ankexin":
                 lines.append("\n═════ 你在 Alpha 基地遇到了安可欣 ═════")
                 lines.append("")
@@ -282,6 +292,9 @@ class BackroomsRenderer:
                 lines.append("═══════════════════════════════════")
             if char_gift:
                 lines.append(char_gift)
+            if quest_offer:
+                lines.append(f"\n📋 安可欣给你布置了一个新任务！")
+                lines.append(f"使用 /br quest accept {quest_offer} 接受任务，或 /br quest 查看详情。")
 
         # 理智值过低
         warn = self.low_sanity_warning(ctx.sanity)
@@ -296,6 +309,21 @@ class BackroomsRenderer:
             lines.append(self._death_message())
 
         lines.append(f"\n{self.status_bar(ctx)}")
+
+        # 基地工作提示
+        if work_triggered:
+            lines.append("🏢 Alpha 基地有新工作可接！使用 /br work 查看工作面板。")
+
+        # 安可欣主动派发日常工作任务
+        if work_assigned:
+            wid, wtitle = work_assigned
+            lines.append("")
+            lines.append("═══════════════════════════════════")
+            lines.append("📋 安可欣找到了你，给你布置了一份基地工作！")
+            lines.append("")
+            lines.append(f"📝 工作：「{wtitle}」")
+            lines.append(f"→ 使用 /br work start {wid} 查看详情并开始工作")
+            lines.append("═══════════════════════════════════")
 
         # 引导
         if ctx.health > 0 and ctx.current_level < 399:
@@ -377,26 +405,31 @@ class BackroomsRenderer:
 
         return "\n".join(lines)
 
-    def render_status(self, ctx: RenderContext, inventory_text: str) -> str:
+    def render_status(self, ctx: RenderContext, inventory_text: str, currency: int = 0) -> str:
         """探员状态面板。"""
         h_label = self.health_label(ctx.health, ctx.initial_health)
         s_label = self.sanity_label(ctx.sanity, ctx.initial_sanity)
         progress = min(100, int(ctx.current_level / 399 * 100))
         bar = "█" * (progress // 5) + "░" * (20 - progress // 5)
 
-        return (
+        lines = [
             "══════════════════\n"
             "  📊 探 员 状 态\n"
             "══════════════════\n\n"
             f"📍 {ctx.level_info['title']}\n"
             f"   危险等级：{ctx.level_info['danger']}\n\n"
             f"❤️ 生命值：{ctx.health}/{ctx.initial_health}  [{h_label}]\n"
-            f"🧠 理智值：{ctx.sanity}/{ctx.initial_sanity}  [{s_label}]\n\n"
-            f"📦 背包物品：\n{inventory_text}\n\n"
+            f"🧠 理智值：{ctx.sanity}/{ctx.initial_sanity}  [{s_label}]\n",
+        ]
+        if currency > 0:
+            lines.append(f"💰 贡献点：{currency}\n")
+        lines += [
+            f"\n📦 背包物品：\n{inventory_text}\n\n"
             f"🏁 通关进度：{progress}%  [{bar}]\n\n"
-            f"🔢 出口尝试次数（本层）：{ctx.current_level}/399 楼层\n"
-            "══════════════════"
-        )
+            f"🔢 出口尝试次数（本层）：{ctx.exit_attempts} 次\n"
+            "══════════════════",
+        ]
+        return "".join(lines)
 
     def render_inventory(self, inventory_text: str, hints: list[str]) -> str:
         """背包面板。"""
@@ -417,7 +450,7 @@ class BackroomsRenderer:
             "══════════════════════\n\n"
             "🎯 游戏目标：从 Level 0 出发，一路寻找出口，到达 Level 399 逃出后室。\n\n"
             "📋 命令列表：\n"
-            "  /br story — 以转发消息查看后室背景故事\n"
+            "  /br story    — 故事档案（/br story 查看列表 / <ID> 查看详情）\n"
             "  /br test      — 测试插件连通性（验证插件是否正常）\n"
             "  /br start     — 开始新游戏\n"
             "  /br explore    — 探索当前楼层（消耗5理智，可能遇敌/发现物品/捡到纸条）\n"
@@ -426,6 +459,8 @@ class BackroomsRenderer:
             "  /br status     — 查看探员状态\n"
             "  /br inventory  — 查看背包\n"
             "  /br use <编号> — 使用背包中的物品（如 /br use 1）\n"
+            "  /br quest — 查看任务面板 /br quest accept <ID> / <ID> submit\n"
+            "  /br work — Alpha 基地工作（/br work start <ID> / answer <ID> <答案>）\n"
             "  /br help       — 显示此帮助\n"
             "  /br people_net — 已解锁人物关系图\n\n"
             "⚙️ 游戏机制：\n"
@@ -490,7 +525,6 @@ class BackroomsRenderer:
                     lines.append(f"  · {info['name']} 与 {info['relationship']}")
 
         return "\n".join(lines)
-        return "\n".join(lines)
 
     def render_test(self) -> str:
         """连通性测试回显。"""
@@ -536,3 +570,226 @@ class BackroomsRenderer:
 
     def render_already_at_399(self) -> str:
         return "你已经到达 Level 399——最终出口！\n使用 /br exit 尝试推开那扇门吧。"
+
+    # ==================== 基地工作系统 ====================
+
+    def render_work_list(self, player, work_manager) -> str:
+        """基地工作面板。"""
+        lines = ["══════════════════════\n  🏢 Alpha 基地工作\n══════════════════════\n"]
+        lines.append(f"💰 贡献点：{player.currency}")
+        lines.append("")
+
+        if player.current_level != 1:
+            lines.append("⚠️ 你不在 Alpha 基地。请前往 Level 1 参与工作。")
+            return "\n".join(lines)
+
+        lines.append("📋 可接工作：")
+        available = work_manager.get_available_works(player.completed_works)
+        if available:
+            for wid in sorted(available):
+                w = work_manager.get_work(wid)
+                if not w:
+                    continue
+                lines.append(f"  [{wid}] {w['title']}")
+                lines.append(f"     部门：{w.get('department', '未知')}")
+                lines.append(f"     类型：{w.get('puzzle_type', '未知')}")
+                lines.append(f"     奖励：{w.get('reward_currency', 0)} 贡献点")
+                if w.get("reward_items"):
+                    lines.append(f"            + {', '.join(w['reward_items'])}")
+        else:
+            lines.append("  暂无新工作。")
+
+        lines.append("")
+
+        lines.append("🏆 已完成：")
+        if player.completed_works:
+            for wid in sorted(player.completed_works):
+                w = work_manager.get_work(wid)
+                if w:
+                    lines.append(f"  ✅ {w['title']}")
+        else:
+            lines.append("  暂无。")
+
+        lines.append("")
+        lines.append("命令：/br work start <ID> 开始 | /br work answer <ID> <答案> 提交")
+        return "\n".join(lines)
+
+    def render_work_start(self, work: dict, work_id: str) -> str:
+        """开始工作——显示谜题。"""
+        lines = [
+            f"══════════════════════\n  📝 {work['title']}  [{work_id}]\n══════════════════════\n",
+            f"部门：{work.get('department', '未知')}",
+            f"类型：{work.get('puzzle_type', '未知')}",
+            "",
+            work.get("description", ""),
+            "",
+        ]
+        if work.get("hint"):
+            lines.append(f"💡 提示：{work['hint']}")
+            lines.append("")
+        lines.append(f"提交答案：/br work answer {work_id} <你的答案>")
+        return "\n".join(lines)
+
+    def render_work_success(self, work: dict, player, story_text: str | None = None, items_pool: list[dict] | None = None) -> str:
+        """工作完成。"""
+        lines = [f"══════════════════════\n  ✅ 工作完成：{work['title']}\n══════════════════════\n"]
+        lines.append(work.get("success_text", "你完成了工作！"))
+        lines.append("")
+        lines.append(f"🎁 获得 {work.get('reward_currency', 0)} 贡献点")
+        if work.get("reward_items"):
+            item_names = [BackroomsRenderer._lookup_item_name(item_id, items_pool) for item_id in work["reward_items"]]
+            lines.append(f"🎒 获得物品：{', '.join(item_names)}")
+        lines.append(f"💰 当前贡献点：{player.currency}")
+        if story_text:
+            lines.append("")
+            lines.append("──────────────────")
+            lines.append("📖 新故事解锁：")
+            lines.append("")
+            lines.append(story_text)
+            lines.append("──────────────────")
+        return "\n".join(lines)
+
+    def render_work_failure(self, work: dict) -> str:
+        """答案错误。"""
+        lines = [f"❌ 答案错误！"]
+        lines.append(work.get("failure_text", "请再试一次。"))
+        lines.append("")
+        if work.get("hint"):
+            lines.append(f"💡 提示：{work['hint']}")
+        return "\n".join(lines)
+
+    # ==================== 工作故事面板 ====================
+
+    def render_story_list(self, unlocked: set[str], work_story_manager) -> str:
+        """已解锁的工作故事列表。"""
+        lines = ["══════════════════════\n  📖 故事档案\n══════════════════════\n"]
+
+        if not unlocked:
+            lines.append("暂无已解锁的故事。完成 Alpha 基地的工作可解锁故事。")
+            lines.append("")
+            lines.append("使用 /br work 查看可接工作。")
+            return "\n".join(lines)
+
+        lines.append(f"已解锁 {len(unlocked)}/{len(work_story_manager.story_ids)} 个故事：")
+        lines.append("")
+
+        for story_id in sorted(work_story_manager.story_ids):
+            if story_id in unlocked:
+                # 尝试读取故事第一行作为标题
+                story_text = work_story_manager.get_story(story_id) or ""
+                first_line = story_text.split("\n")[0] if story_text else story_id
+                lines.append(f"  ✅ [{story_id}] — {first_line}")
+                lines.append(f"     → 使用 /br story {story_id} 查看")
+            else:
+                lines.append(f"  ❓ [{story_id}] — ???（未解锁）")
+
+        lines.append("")
+        lines.append("使用 /br story <ID> 以合并转发消息查看具体故事内容。")
+        return "\n".join(lines)
+
+    # ==================== 任务系统 ====================
+
+    @staticmethod
+    def _format_objective(quest: dict, items_pool: list[dict] | None = None) -> str:
+        ot = quest.get("objective_type", "")
+        if ot == "reach_level":
+            return f"到达 Level {quest.get('objective_target', '?')}"
+        if ot == "collect_item":
+            item_id = quest.get("objective_item", "?")
+            display = BackroomsRenderer._lookup_item_name(item_id, items_pool)
+            return f"收集道具「{display}」"
+        if ot == "use_item":
+            item_id = quest.get("objective_item", "?")
+            display = BackroomsRenderer._lookup_item_name(item_id, items_pool)
+            return f"提交 {quest.get('objective_count', 1)} 个「{display}」"
+        return "未知目标"
+
+    @staticmethod
+    def _lookup_item_name(item_id: str, items_pool: list[dict] | None = None) -> str:
+        """查找物品的显示名称，找不到则返回原始 ID。"""
+        if items_pool:
+            for i in items_pool:
+                if i["name"] == item_id:
+                    return i.get("display_name", item_id)
+        return item_id
+
+    def render_quest_list(self, player, quest_manager, items_pool: list[dict] | None = None) -> str:
+        """任务面板。"""
+        lines = ["══════════════════════\n  📋 任 务 面 板\n══════════════════════\n"]
+        lines.append(f"💰 M.E.G.CN 贡献点：{player.currency}\n")
+
+        # 进行中的任务
+        lines.append("📌 进行中的任务：")
+        if player.active_quests:
+            for qid in sorted(player.active_quests):
+                q = quest_manager.get_quest(qid)
+                if not q:
+                    continue
+                status = "✅ 可提交" if quest_manager.check_quest_complete(qid, player) else "⏳ 进行中"
+                lines.append(f"  [{qid}] {q['title']} — {status}")
+                lines.append(f"     目标：{self._format_objective(q, items_pool)}")
+                if quest_manager.check_quest_complete(qid, player):
+                    lines.append(f"     → 使用 /br quest submit {qid} 提交任务")
+        else:
+            lines.append("  暂无。在 Alpha 基地遇到安可欣有概率接到任务。")
+
+        lines.append("")
+
+        # 可接任务
+        lines.append("📋 可接任务：")
+        available = quest_manager.get_available_quests(player.active_quests, player.completed_quests)
+        if available:
+            for qid in sorted(available):
+                q = quest_manager.get_quest(qid)
+                if not q:
+                    continue
+                lines.append(f"  [{qid}] {q['title']}")
+                lines.append(f"     目标：{self._format_objective(q, items_pool)}")
+                lines.append(f"     奖励：{q.get('reward_text', '?')}")
+                lines.append(f"     发布者：{q.get('giver_name', '?')}")
+                if q.get("description"):
+                    lines.append(f"     描述：{q['description']}")
+        else:
+            lines.append("  暂无新任务。")
+
+        lines.append("")
+
+        # 已完成
+        lines.append("🏆 已完成：")
+        if player.completed_quests:
+            for qid in sorted(player.completed_quests):
+                q = quest_manager.get_quest(qid)
+                if q:
+                    lines.append(f"  ✅ {q['title']}")
+        else:
+            lines.append("  暂无。")
+
+        lines.append("\n命令：/br quest accept <ID> 接受 | /br quest submit <ID> 提交")
+        return "\n".join(lines)
+
+    def render_quest_accept(self, quest: dict, items_pool: list[dict] | None = None) -> str:
+        return (
+            f"📋 已接受任务「{quest['title']}」\n\n"
+            f"目标：{self._format_objective(quest, items_pool)}\n"
+            f"奖励：{quest.get('reward_text', '?')}\n\n"
+            f"完成任务后使用 /br quest submit <ID> 提交。"
+        )
+
+    def render_quest_submit(self, quest: dict, player, reward_text: str) -> str:
+        lines = [f"══════════════════════\n  🎉 任务完成！\n══════════════════════\n"]
+        lines.append(f"任务「{quest['title']}」已完成！")
+        lines.append("")
+        if quest.get("submit_text"):
+            lines.append(quest["submit_text"])
+        lines.append("")
+        lines.append(f"🎁 获得奖励：{reward_text}")
+        lines.append(f"💰 当前贡献点：{player.currency}")
+        return "\n".join(lines)
+
+    def render_quest_not_complete(self, quest: dict, player, items_pool: list[dict] | None = None) -> str:
+        ot = quest.get("objective_type", "")
+        lines = [f"⚠️ 任务「{quest['title']}」尚未完成。"]
+        lines.append(f"目标：{self._format_objective(quest, items_pool)}")
+        if ot == "reach_level":
+            lines.append(f"当前楼层：Level {player.current_level}，目标：Level {quest.get('objective_target', '?')}")
+        return "\n".join(lines)

@@ -1,5 +1,24 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.0.8 (2026-06-20)
+
+### 新增
+- 任务系统：5 个安可欣发布的任务（探索取证、收集物品、提交物资），完成可获 M.E.G.CN 贡献点
+- `/br quest` 命令：查看任务面板 / 接受任务 / 提交任务
+- M.E.G.CN 贡献点系统：在状态面板和任务面板中显示
+- 到达新楼层自动检测任务进度，达标时提示提交
+- 基地工作系统：5 个基于高中自然地理的解谜工作，完成获得贡献点并解锁故事
+- `/br work` 命令：查看工作面板 / 开始工作 / 提交答案
+- `base_story/` 目录：存放工作完成后解锁的故事事件文件
+- `BaseWorkStoryManager`：自动加载 base_story/ 下的故事
+- `/br story` 改为故事档案面板：查看已解锁的工作故事，使用 `/br story <ID>` 以合并转发消息查看
+
+### 变更
+- Level 1 遇到安可欣时有概率接到任务
+- Level 1 探索时刷新可用工作列表
+- 存档新增 `currency`、`active_quests`、`completed_quests`、`pending_quest_offer`、`available_works`、`completed_works`、`work_stories` 字段
+- 版本号统一更新至 `1.0.8`
+
 ## v1.0.7 (2026-06-20)
 
 ### 变更

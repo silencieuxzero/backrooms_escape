@@ -17,7 +17,7 @@ from maibot_sdk import Command, HookHandler, MaiBotPlugin
 from maibot_sdk.types import HookMode, HookOrder, ErrorPolicy
 
 from .config import BackroomsGameConfig
-from .story import StoryManager, PeopleStoryManager
+from .story import StoryManager, PeopleStoryManager, QuestManager, WorkManager, BaseWorkStoryManager
 from .renderer import BackroomsRenderer, RenderContext
 
 # ==================== 外部数据文件 ====================
@@ -55,10 +55,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.0.7"
+PLUGIN_VERSION = "1.0.8"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.0.7"
+SAVE_VERSION = "1.0.8"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -294,6 +294,14 @@ class PlayerState:
     exit_attempts: int = 0  # 当前层级尝试找出口的次数
     pending_note: str | None = None  # 待阅读的纸条内容
     unlocked_chars: set[str] = field(default_factory=set)  # 已解锁的角色 ID 集合
+    currency: int = 0  # M.E.G.CN 内部贡献点
+    active_quests: set[str] = field(default_factory=set)  # 进行中的任务 ID
+    completed_quests: set[str] = field(default_factory=set)  # 已完成的任务 ID
+    pending_quest_offer: str | None = None  # 待接受的任务 ID（角色给出但还未接受）
+    available_works: set[str] = field(default_factory=set)  # 基地可接的工作 ID
+    completed_works: set[str] = field(default_factory=set)  # 已完成的工作 ID
+    work_stories: set[str] = field(default_factory=set)  # 已解锁的工作故事 ID
+    l1_explore_count: int = 0  # Level 1 中已探索次数（达到阈值触发日常任务）
 
 
 # ==================== 插件主体 ====================
@@ -308,6 +316,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._players: dict[str, PlayerState] = {}
         self._story_manager = StoryManager()
         self._people_manager = PeopleStoryManager()
+        self._quest_manager = QuestManager(ITEMS_POOL)
+        self._work_manager = WorkManager()
+        self._work_story_manager = BaseWorkStoryManager()
         self._renderer = BackroomsRenderer()
         self._plugin_disabled: bool = False
         self._admin_id: str = ""
@@ -408,58 +419,26 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     @Command(
         "br_story",
-        description="查看后室背景故事 — M.E.G.CN 加密档案",
-        pattern=r"^/br\s+story$",
+        description="故事档案 — 查看已解锁的工作故事",
+        pattern=r"^/br\s+story",
     )
     async def handle_story(self, **kwargs: Any):
-        """用 NapCat 合并转发消息展示后室档案。"""
+        """查看工作故事面板。"""
         stream_id = kwargs.get("stream_id", "")
-
-        story_text = (
-            "══════════════════════════\n"
-            "  M.E.G.CN 内部档案 #BACKROOMS-0001\n"
-            "  密级：最高机密 | 仅供特级探员查阅\n"
-            "══════════════════════════\n\n"
-            "【研究员 Luna · 后室研究中心】\n\n"
-            "后室是一个由无数诡异楼层组成的超自然空间。没有人知道它的起源，"
-            "也没有人知道它究竟有多少层。目前 M.E.G.CN 已探明的楼层超过 400 层，"
-            "其中 Level 0 是所有切入者的起点，而 Level 399 据信是唯一的稳定出口。\n\n"
-            "──────────────────────────\n\n"
-            "【特级探员 K · 前线报告】\n\n"
-            "我永远不会忘记那个瞬间。上一秒我还在基地的走廊里喝咖啡，"
-            "下一秒我就站在了一个无限延伸的黄色办公空间里——这就是 Level 0。\n\n"
-            "我在里面走了整整三天才发现第一个出口。那三天里，"
-            "我学会了辨别荧光灯的声音变化来判断方向，学会了在转角处先听再走。\n\n"
-            "──────────────────────────\n\n"
-            "【研究员 Luna · 实体威胁评估】\n\n"
-            "笑魇（伤害 15）— 黑暗中的无面实体，光可以驱散\n"
-            "猎犬（伤害 20）— 高速四足猛兽，会追踪猎物\n"
-            "窃皮者（伤害 25）— 极度危险，会剥取皮肤\n"
-            "深海之物（伤害 35）— Level 7 的不可名状存在\n\n"
-            "携带手电筒是对抗笑魇最有效的手段。层级钥匙则是每个探员梦寐以求的圣物。\n\n"
-            "──────────────────────────\n\n"
-            "【特级探员 K · 生存建议】\n\n"
-            "如果你正在读这段文字，说明你已经被选中执行后室探索任务。记住：\n"
-            "1. 每到一个新楼层，先探索环境，不要急着找出口\n"
-            "2. 杏仁水和急救包是你的生命线\n"
-            "3. 如果某一层多次找不到出口，回头探索找层级钥匙\n"
-            "4. 理智值比生命值更容易被忽视，但理智耗尽同样致命\n\n"
-            "活下去。我们在外面等你。\n\n"
-            "══════════════════════════\n"
-            "档案 #BACKROOMS-0001 阅读完毕\n"
-            "祝你好运，探员。\n\n"
-            "下一步：使用 /br start 开始你的后室之旅\n"
-            "══════════════════════════"
+        message = kwargs.get("message", {})
+        raw_text = str(
+            message.get("raw_message")
+            or message.get("text")
+            or message.get("message")
+            or ""
         )
-
-        nodes = [
-            self._forward_node("M.E.G.CN-档案部", "M.E.G.CN 档案部 | 加密通讯", story_text),
-        ]
-
-        self.ctx.logger.info("发送故事档案: nodes=%d", len(nodes))
-        await self._send(stream_id, story_text, nodes=nodes)
-
-        return True, "后室档案已发送", 1
+        m = re.search(r"/br\s+story\s+(\S+)", raw_text)
+        if m:
+            story_id = m.group(1)
+            await self._do_story_view(stream_id, story_id)
+        else:
+            await self._do_story_list(stream_id)
+        return True, "故事面板处理完成", 1
 
     # ==================== 转发消息工具方法 ====================
 
@@ -643,6 +622,58 @@ class BackroomsGamePlugin(MaiBotPlugin):
         message = kwargs.get("message", {})
         await self._do_on(stream_id, message)
         return True, "插件启用处理完成", 1
+
+    @Command(
+        "br_quest",
+        description="任务系统 — 查看任务 / 接受任务 / 提交任务",
+        pattern=r"^/br\s+quest",
+    )
+    async def handle_quest(self, **kwargs: Any):
+        """任务面板。"""
+        stream_id = kwargs.get("stream_id", "")
+        message = kwargs.get("message", {})
+        raw_text = str(
+            message.get("raw_message")
+            or message.get("text")
+            or message.get("message")
+            or ""
+        )
+        m = re.search(r"/br\s+quest\s+accept\s+(\S+)", raw_text)
+        if m:
+            await self._do_quest_accept(stream_id, m.group(1))
+            return True, "任务接受处理完成", 1
+        m = re.search(r"/br\s+quest\s+submit\s+(\S+)", raw_text)
+        if m:
+            await self._do_quest_submit(stream_id, m.group(1))
+            return True, "任务提交处理完成", 1
+        await self._do_quest_list(stream_id)
+        return True, "任务面板已显示", 1
+
+    @Command(
+        "br_work",
+        description="基地工作 — 在 Level 1 Alpha 基地参与日常工作（解谜）",
+        pattern=r"^/br\s+work",
+    )
+    async def handle_work(self, **kwargs: Any):
+        """基地工作系统。"""
+        stream_id = kwargs.get("stream_id", "")
+        message = kwargs.get("message", {})
+        raw_text = str(
+            message.get("raw_message")
+            or message.get("text")
+            or message.get("message")
+            or ""
+        )
+        m = re.search(r"/br\s+work\s+start\s+(\S+)", raw_text)
+        if m:
+            await self._do_work_start(stream_id, m.group(1))
+            return True, "工作开始处理完成", 1
+        m = re.search(r"/br\s+work\s+answer\s+(\S+)\s+(.+)", raw_text)
+        if m:
+            await self._do_work_answer(stream_id, m.group(1), m.group(2).strip())
+            return True, "工作答案处理完成", 1
+        await self._do_work_list(stream_id)
+        return True, "工作面板已显示", 1
 
     # ==================== 访问控制拦截 ====================
 
@@ -921,6 +952,14 @@ class BackroomsGamePlugin(MaiBotPlugin):
             "exit_attempts": player.exit_attempts,
             "pending_note": player.pending_note,
             "unlocked_chars": sorted(player.unlocked_chars),
+            "currency": player.currency,
+            "active_quests": sorted(player.active_quests),
+            "completed_quests": sorted(player.completed_quests),
+            "pending_quest_offer": player.pending_quest_offer,
+            "available_works": sorted(player.available_works),
+            "completed_works": sorted(player.completed_works),
+            "work_stories": sorted(player.work_stories),
+            "l1_explore_count": player.l1_explore_count,
         }
         filepath = self._player_file_path(user_id)
         try:
@@ -952,6 +991,14 @@ class BackroomsGamePlugin(MaiBotPlugin):
             exit_attempts=data.get("exit_attempts", 0),
             pending_note=data.get("pending_note"),
             unlocked_chars=set(data.get("unlocked_chars", [])),
+            currency=data.get("currency", 0),
+            active_quests=set(data.get("active_quests", [])),
+            completed_quests=set(data.get("completed_quests", [])),
+            pending_quest_offer=data.get("pending_quest_offer"),
+            available_works=set(data.get("available_works", [])),
+            completed_works=set(data.get("completed_works", [])),
+            work_stories=set(data.get("work_stories", [])),
+            l1_explore_count=data.get("l1_explore_count", 0),
         )
 
     def _delete_player_save(self, user_id: str) -> None:
@@ -1037,6 +1084,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             inventory_count=len(player.inventory),
             game_config=self.config.game,
             level_info=self._get_level_info(player.current_level),
+            exit_attempts=player.exit_attempts,
         )
 
     async def _send(self, stream_id: str, text: str, *, nodes: list[dict] | None = None) -> bool:
@@ -1193,6 +1241,19 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         return crate_size, items
 
+    def _maybe_ankexin_task(self, player: PlayerState) -> str | None:
+        """按配置概率决定安可欣是否发放任务。返回任务 ID 或 None。"""
+        if random.random() >= self.config.game.ankexin_task_chance:
+            return None
+        available = self._quest_manager.get_available_quests(
+            player.active_quests, player.completed_quests,
+        )
+        if not available:
+            return None
+        quest_offer = random.choice(available)
+        player.pending_quest_offer = quest_offer
+        return quest_offer
+
     def _format_inventory(self, player: PlayerState) -> str:
         """格式化背包内容。"""
         if not player.inventory:
@@ -1335,29 +1396,60 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 entity_encounter = (entity_name, entity_data, edamage)
 
         # Level 1 特殊：在 M.E.G.CN Alpha 基地遇到角色
-        char_encounter: tuple[str, str, str | None] | None = None
+        #   初见（未解锁）→ 触发初见剧情 + 礼物；再次遇到（已解锁）→ 触发常规剧情
+        #   遇到安可欣时按 ankexin_task_chance 概率决定是否发放任务
+        char_encounter: tuple[str, str, str | None, str | None] | None = None
         if player.current_level == 1:
-            level1_chars = [cid for cid in ("ankexin", "anjinian")
-                            if self._people_manager.get_story_count(cid) > 0]
-            if level1_chars and random.random() < 0.40:
-                char_id = random.choice(level1_chars)
-                story_text = self._people_manager.get_random_story(char_id)
-                if story_text:
-                    # 首次遇到角色：赠送 2 瓶杏仁水
-                    char_gift: str | None = None
-                    if char_id not in player.unlocked_chars:
+            # 筛选可遇角色：有初见剧情的角色
+            all_chars = [cid for cid in ("ankexin", "anjinian")
+                         if self._people_manager.get_first_story(cid) is not None]
+
+            if all_chars and random.random() < 0.40:
+                char_id = random.choice(all_chars)
+
+                if char_id not in player.unlocked_chars:
+                    # ── 初见：初见剧情 + 礼物 ──
+                    story_text = self._people_manager.get_first_story(char_id)
+                    if story_text:
+                        # 赠送 2 瓶杏仁水作为见面礼
                         almond_water = {"name": "o1", "type": "consumable", "effect": "sanity_restore", "value": 30,
                                         "display_name": "杏仁水",
                                         "description": "后室中最常见的补给品，喝下可以恢复理智，味道像融化的杏仁冰淇淋。"}
                         player.inventory.append(dict(almond_water))
                         player.inventory.append(dict(almond_water))
                         char_gift = "🎁 对方给了你 2 瓶杏仁水作为见面礼。"
-                    char_encounter = (char_id, story_text, char_gift)
-                    player.unlocked_chars.add(char_id)
+                        # 按概率决定安可欣是否发放任务
+                        quest_offer = self._maybe_ankexin_task(player) if char_id == "ankexin" else None
+                        char_encounter = (char_id, story_text, char_gift, quest_offer)
+                        player.unlocked_chars.add(char_id)
+                else:
+                    # ── 已解锁：触发常规剧情（打招呼等） ──
+                    routine_text = self._people_manager.get_random_routine(char_id)
+                    if routine_text:
+                        # 按概率决定安可欣是否发放任务
+                        quest_offer = self._maybe_ankexin_task(player) if char_id == "ankexin" else None
+                        char_encounter = (char_id, routine_text, None, quest_offer)
 
         # 理智值过低效果
         if player.sanity <= 0:
             player.health = max(0, player.health - 10)
+
+        # Level 1 基地工作：每探索 work_trigger_interval 次触发安可欣日常任务
+        work_triggered = False
+        work_assigned: tuple[str, str] | None = None
+        if player.current_level == 1:
+            player.l1_explore_count += 1
+            interval = cfg.work_trigger_interval
+            if player.l1_explore_count >= interval:
+                player.l1_explore_count = 0
+                # 找一个未完成的工作派发给玩家
+                available = self._work_manager.get_available_works(player.completed_works)
+                if available:
+                    wid = random.choice(available)
+                    w = self._work_manager.get_work(wid)
+                    if w:
+                        player.available_works.add(wid)
+                        work_assigned = (wid, w.get("title", wid))
 
         # 死亡处理
         if player.health <= 0:
@@ -1368,7 +1460,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         ctx = self._make_ctx(player)
         await self._send(
             stream_id,
-            self._renderer.render_explore(ctx, event_text, crate_result, health_cost, note_found, entity_encounter, char_encounter),
+            self._renderer.render_explore(ctx, event_text, crate_result, health_cost, note_found, entity_encounter, char_encounter, work_triggered, work_assigned),
         )
         self._save_player(user_id)
 
@@ -1449,6 +1541,15 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 stream_id,
                 self._renderer.render_exit_found(ctx, new_level_info, shortcut_desc, from_level),
             )
+
+            # 检测任务进度：到达目标楼层
+            for qid in list(player.active_quests):
+                q = self._quest_manager.get_quest(qid)
+                if q and q.get("objective_type") == "reach_level" and q.get("objective_target", 999) <= player.current_level:
+                    await self._send(
+                        stream_id,
+                        f"📋 任务「{q['title']}」目标已达成！使用 /br quest submit {qid} 提交任务领取奖励。",
+                    )
         else:
             # 没找到出口
             player.exit_attempts += 1
@@ -1508,7 +1609,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         inventory_text = self._format_inventory(player)
         await self._send(
             stream_id,
-            self._renderer.render_status(ctx, inventory_text),
+            self._renderer.render_status(ctx, inventory_text, player.currency),
         )
 
     async def _do_show_inventory(self, stream_id: str) -> None:
@@ -1554,6 +1655,225 @@ class BackroomsGamePlugin(MaiBotPlugin):
             stream_id,
             self._renderer.render_people_net(self._people_net_text, unlocked),
         )
+
+    # ==================== 任务系统 ====================
+
+    async def _do_quest_list(self, stream_id: str) -> None:
+        """显示任务面板。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.game_started:
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        await self._send(
+            stream_id,
+            self._renderer.render_quest_list(player, self._quest_manager, ITEMS_POOL),
+        )
+
+    async def _do_quest_accept(self, stream_id: str, quest_id: str) -> None:
+        """接受任务。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.game_started:
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        quest = self._quest_manager.get_quest(quest_id)
+        if not quest:
+            await self._send(stream_id, f"❌ 任务 [{quest_id}] 不存在。使用 /br quest 查看可用任务。")
+            return
+        if quest_id in player.active_quests:
+            await self._send(stream_id, f"⚠️ 任务「{quest['title']}」已经在进行中了。")
+            return
+        if quest_id in player.completed_quests:
+            await self._send(stream_id, f"⚠️ 任务「{quest['title']}」已经完成了。")
+            return
+
+        player.active_quests.add(quest_id)
+        player.pending_quest_offer = None
+        self._save_player(user_id)
+        await self._send(
+            stream_id,
+            self._renderer.render_quest_accept(quest, ITEMS_POOL),
+        )
+
+    async def _do_quest_submit(self, stream_id: str, quest_id: str) -> None:
+        """提交任务。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.game_started:
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        quest = self._quest_manager.get_quest(quest_id)
+        if not quest:
+            await self._send(stream_id, f"❌ 任务 [{quest_id}] 不存在。")
+            return
+        if quest_id not in player.active_quests:
+            await self._send(stream_id, f"⚠️ 你没有接受任务「{quest['title']}」。使用 /br quest 查看进行中的任务。")
+            return
+
+        if not self._quest_manager.check_quest_complete(quest_id, player):
+            await self._send(
+                stream_id,
+                self._renderer.render_quest_not_complete(quest, player, ITEMS_POOL),
+            )
+            return
+
+        # 消耗物品类任务：从背包扣除物品
+        if quest.get("objective_type") == "use_item":
+            item_name = quest.get("objective_item", "")
+            count = quest.get("objective_count", 1)
+
+            # 先验证数量足够再扣减，避免部分消耗导致物品丢失
+            actual_count = sum(1 for inv in player.inventory if inv.get("name") == item_name)
+            if actual_count < count:
+                await self._send(
+                    stream_id,
+                    f"❌ 提交任务需要 {count} 个 {self._item_display_name(item_name)}，但背包中只有 {actual_count} 个。",
+                )
+                return
+
+            for _ in range(count):
+                for idx, inv_item in enumerate(player.inventory):
+                    if inv_item.get("name") == item_name:
+                        player.inventory.pop(idx)
+                        break
+
+        reward_text = self._quest_manager.apply_rewards(quest_id, player)
+        self._save_player(user_id)
+        await self._send(
+            stream_id,
+            self._renderer.render_quest_submit(quest, player, reward_text),
+        )
+
+    # ==================== 工作故事面板 ====================
+
+    async def _do_story_list(self, stream_id: str) -> None:
+        """显示已解锁的工作故事列表。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.game_started:
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        await self._send(
+            stream_id,
+            self._renderer.render_story_list(player.work_stories, self._work_story_manager),
+        )
+
+    async def _do_story_view(self, stream_id: str, story_id: str) -> None:
+        """通过合并转发消息查看具体故事。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.game_started:
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        if story_id not in player.work_stories:
+            await self._send(stream_id, f"❌ 故事 [{story_id}] 尚未解锁。使用 /br story 查看已解锁的故事。")
+            return
+
+        story_text = self._work_story_manager.get_story(story_id)
+        if not story_text:
+            await self._send(stream_id, f"⚠️ 故事 [{story_id}] 内容为空。")
+            return
+
+        # 从 work_manager 查找对应标题
+        title = story_id
+        for wid in self._work_manager.work_ids:
+            w = self._work_manager.get_work(wid)
+            if w and w.get("unlock_story") == story_id:
+                title = w.get("title", story_id)
+                break
+
+        nodes = [
+            self._forward_node("Alpha基地档案室", f"📖 {title}", story_text),
+        ]
+
+        await self._send(stream_id, story_text, nodes=nodes)
+
+    # ==================== 基地工作系统 ====================
+
+    async def _do_work_list(self, stream_id: str) -> None:
+        """显示基地工作面板。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.game_started:
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        await self._send(
+            stream_id,
+            self._renderer.render_work_list(player, self._work_manager),
+        )
+
+    async def _do_work_start(self, stream_id: str, work_id: str) -> None:
+        """开始一个工作。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.game_started:
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        if player.current_level != 1:
+            await self._send(stream_id, "⚠️ 基地工作仅在 Level 1 的 M.E.G.CN Alpha 基地进行。")
+            return
+
+        work = self._work_manager.get_work(work_id)
+        if not work:
+            await self._send(stream_id, f"❌ 工作 [{work_id}] 不存在。使用 /br work 查看可接工作。")
+            return
+        if work_id in player.completed_works:
+            await self._send(stream_id, f"⚠️ 工作「{work['title']}」已经完成了。")
+            return
+
+        await self._send(
+            stream_id,
+            self._renderer.render_work_start(work, work_id),
+        )
+
+    async def _do_work_answer(self, stream_id: str, work_id: str, answer: str) -> None:
+        """提交工作答案。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.game_started:
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        work = self._work_manager.get_work(work_id)
+        if not work:
+            await self._send(stream_id, f"❌ 工作 [{work_id}] 不存在。")
+            return
+        if work_id in player.completed_works:
+            await self._send(stream_id, f"⚠️ 工作「{work['title']}」已经完成。")
+            return
+
+        if self._work_manager.check_answer(work_id, answer):
+            # 正确：发放奖励
+            player.currency += work.get("reward_currency", 0)
+            for item_name in work.get("reward_items", []):
+                for template in ITEMS_POOL:
+                    if template["name"] == item_name:
+                        player.inventory.append(dict(template))
+                        break
+            player.completed_works.add(work_id)
+            story_id = work.get("unlock_story", "")
+            story_text = None
+            if story_id:
+                player.work_stories.add(story_id)
+                story_text = self._work_story_manager.get_story(story_id)
+            self._save_player(user_id)
+            await self._send(
+                stream_id,
+                self._renderer.render_work_success(work, player, story_text, ITEMS_POOL),
+            )
+        else:
+            await self._send(
+                stream_id,
+                self._renderer.render_work_failure(work),
+            )
 
     async def _do_say(self, stream_id: str) -> None:
         """随机输出一句名人名言。"""

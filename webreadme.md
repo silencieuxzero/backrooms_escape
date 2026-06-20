@@ -20,13 +20,13 @@
 
 如果收到回复「✅ 后室逃生插件已正常接收消息！」，说明插件工作正常，可以开始游戏。
 
-### 第二步（可选）：了解背景故事
+### 第二步（可选）：查看已解锁的工作故事
 
 ```
 /br story
 ```
 
-通过 NapCat 合并转发消息阅读后室背景故事档案，了解世界观和生存建议。此命令同时可用于测试转发消息功能。
+完成 Alpha 基地工作后，使用 `/br story` 查看已解锁的故事列表，使用 `/br story <ID>` 通过合并转发消息阅读具体内容。
 
 ### 第三步：开始游戏
 
@@ -62,14 +62,16 @@
 | 命令 | 说明 | 使用时机 |
 |------|------|----------|
 | `/br test` | 测试插件连通性 | 首次使用前，验证插件是否正常 |
-| `/br story` | 查看后室背景故事 | 了解后室世界观（通过合并转发消息展示） |
+| `/br story` | 故事档案 | 查看已解锁的工作故事列表，`/br story <ID>` 以转发消息查看具体故事 |
 | `/br start` | 开始新游戏 | 首次进入 / 死亡后重开 |
 | `/br explore` | 探索当前楼层 | 每层第一步，搜寻物品和线索 |
 | `/br exit` | 尝试寻找出口 | 探索之后，尝试切入下一层 |
 | `/br read` | 阅读捡到的纸条 | 探索中捡到纸条后，通过合并转发消息展示内容 |
-| `/br use <物品>` | 使用背包中的物品 | 需要恢复生命/理智时使用。例：`/br use o1` |
-| `/br status` | 查看探员状态 | 随时查看生命/理智/进度 |
+| `/br use <编号>` | 使用背包中的物品 | 需要恢复生命/理智时使用。例：`/br use 1` |
+| `/br status` | 查看探员状态 | 随时查看生命/理智/进度/贡献点 |
 | `/br inventory` | 查看背包 | 检查物品，获取使用建议 |
+| `/br quest` | 任务系统 | 查看/接受/提交任务，获得贡献点 |
+| `/br work` | 基地工作 | 在 Level 1 Alpha 基地参与解谜工作，获得贡献点 |
 | `/br help` | 游戏帮助 | 忘记命令时查看 |
 | `/br people_net` | 人物关系图 | 查看已解锁角色的背景与关系
 | `/br say` | 随机名言 | 随机输出一句名人名言 |
@@ -91,7 +93,7 @@
 
 ### 合并转发消息
 
-`/br story` 和 `/br read` 命令在 `output_mode = "forward"` 时使用合并转发消息展示。
+`/br story <ID>` 和 `/br read` 命令在 `output_mode = "forward"` 时使用合并转发消息展示。
 
 节点格式：
 ```python
@@ -428,30 +430,112 @@ group_ids = ["111222333"]
 user_ids = ["444555666"]
 ```
 
-## 自定义故事文本
+## 任务系统
 
-游戏中，玩家在探索时有概率捡到「纸条」。纸条内容来自插件目录下的 `l1_story.txt` ~ `l11_story.txt` 文件（按后室楼层划分），通过合并转发消息展示给玩家。插件会自动发现所有 `l*_story.txt` 文件并加载其中的故事，你可以添加、修改或删除任意文件。
+任务系统通过安可欣发布任务，完成后可获得 M.E.G.CN 贡献点。在 Level 1 Alpha 基地探索时有概率遇到安可欣，她可能给你一个随机任务。
+
+### 任务类型
+
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| `reach_level` | 到达指定楼层 | 到达 Level 5 / Level 11 / Level 399 |
+| `collect_item` | 收集特定物品 | 获取一台 M.E.G. 无线电 |
+| `use_item` | 提交指定物资 | 提交 2 个杏仁水和 1 个急救包 |
+
+### 任务列表
+
+| ID | 标题 | 目标 | 奖励 |
+|----|------|------|------|
+| M001 | 初来乍到 | 到达 Level 5 | 50 贡献点 |
+| M002 | 信号搜寻 | 收集无线电（o5） | 80 贡献点 + 2 急救包 |
+| M003 | 深层探索 | 到达 Level 11 | 150 贡献点 |
+| M004 | 紧急补给 | 提交 2 个 o1 + 消耗 1 个 o2 | 60 贡献点 + 层级钥匙 |
+| M005 | 归途之旅 | 到达 Level 399 | 500 贡献点 |
+
+### 相关命令
+
+| 命令 | 说明 |
+|------|------|
+| `/br quest` | 查看任务面板（进行中/可接/已完成） |
+| `/br quest accept <ID>` | 接受任务 |
+| `/br quest submit <ID>` | 提交已完成的任务 |
+
+到达目标楼层时，系统会自动提示任务可提交。
+
+## 基地工作系统
+
+在 Level 1（Alpha 基地）探索时，有概率触发工作事件，完成后可参与解谜工作赚取贡献点。工作内容基于高中自然地理知识，包括坐标计算、气候识别、时区换算、气压带分析和地形推算。
+
+### 工作列表
+
+| ID | 标题 | 部门 | 谜题类型 | 奖励 |
+|----|------|------|----------|------|
+| W001 | 经纬度坐标校准 | 信息分析组 | 正午太阳高度角计算 | 30 贡献点 |
+| W002 | 气候带识别与物资调配 | 仓储管理 | 世界气候类型判断 | 25 贡献点 |
+| W003 | 时区与抵达时间推算 | 工程部 | 时区换算 | 35 贡献点 + 杏仁水 |
+| W004 | 气压带与后室气流分析 | 信息分析组 | 全球大气环流 | 25 贡献点 |
+| W005 | 等高线地形与路线规划 | 工程部 | 海拔与气温垂直递减率 | 40 贡献点 + 无线电 |
+
+### 相关命令
+
+| 命令 | 说明 |
+|------|------|
+| `/br work` | 查看基地工作面板 |
+| `/br work start <ID>` | 开始工作（显示谜题详情） |
+| `/br work answer <ID> <答案>` | 提交答案 |
+
+### 工作故事
+
+每个工作完成后会解锁一段故事文本。故事文件位于 `base_story/` 目录下，使用 `===STORY_XXX===` 分隔符，格式与 `level_story/` 中的纸条文件相同。
+
+```
+backrooms_escape/
+├── base_story/
+│   ├── work_W001_story.txt      ← 坐标校准工作故事（占位符）
+│   ├── work_W002_story.txt      ← 气候识别工作故事（占位符）
+│   ├── work_W003_story.txt      ← 时区推算工作故事（占位符）
+│   ├── work_W004_story.txt      ← 气流分析工作故事（占位符）
+│   └── work_W005_story.txt      ← 路线规划工作故事（占位符）
+```
+
+## 人物关系图
+
+`/br people_net` 命令查看已解锁角色的人物关系图。数据来源为 `config_other/people_relationship.json`。
+
+- 仅已解锁的角色会显示完整信息
+- 未解锁的角色显示为 `❓ ???`
+- 首次在 Level 1 遇到角色时自动解锁，并赠送 2 瓶杏仁水
+
+### 如何新增角色
+
+1. 在 `people_story/` 下新建 `.txt` 文件，使用 `===CHARACTER_NNN===` 分隔剧情片段
+2. 在 `config_other/people_relationship.json` 中添加该角色的数据条目
+3. 在 `plugin.py` 的 `_do_explore` 中该角色出现的楼层区域添加触发逻辑
+4. 重载插件生效
+
+## 自定义故事文本
 
 ### 文件位置
 
 ```
 backrooms_escape/
 ├── level_story/
-│   ├── l1_story.txt       ← Level 0~1 相关故事（前厅、宜居区）
-│   ├── l2_story.txt       ← Level 2 相关故事（管道梦魇）
-│   ├── l3_story.txt       ← Level 3 相关故事（电气站）
-│   ├── l4_story.txt       ← Level 4 相关故事（废弃办公室）
-│   ├── l5_story.txt       ← Level 5 相关故事（恐怖旅馆）
-│   ├── l6_story.txt       ← Level 6 相关故事（熄灯）
-│   ├── l7_story.txt       ← Level 7 相关故事（深海恐惧）
-│   ├── l8_story.txt       ← Level 8 相关故事（洞穴系统）
-│   ├── l9_story.txt       ← Level 9 相关故事（暗黑郊区）
-│   ├── l10_story.txt      ← Level 10 相关故事（丰收之景）
-│   └── l11_story.txt      ← Level 11 相关故事（无尽城市）
+│   └── l1_story.txt ~ l11_story.txt  ← 故事纸条
+├── base_story/
+│   └── work_W001_story.txt ~ W005    ← 基地工作故事
+├── people_story/
+│   ├── ankexin.txt                   ← 安可欣剧情
+│   └── anjinian.txt                  ← 安继年剧情
+├── config_other/
+│   ├── people_relationship.json      ← 人物关系数据
+│   ├── people_quests.json            ← 任务数据
+│   └── base_work.json                ← 基地工作解谜数据
+├── backrooms_data.json               ← 物品/实体数据
 ├── plugin.py
+├── story.py                          ← 故事/任务/工作加载逻辑
+├── renderer.py
 ├── config.py
-├── story.py           ← 故事加载逻辑（自动发现 level_story/ 下所有 l*_story.txt）
-└── ...
+└── config.toml
 ```
 
 ### 格式说明
@@ -533,20 +617,7 @@ backrooms_escape/
 …
 ```
 
-### 人物关系图
-
-`/br people_net` 命令查看已解锁角色的人物关系图。数据来源为 `config_other/people_relationship.json`。
-
-- 仅已解锁的角色会显示完整信息
-- 未解锁的角色显示为「??? —— 尚未遇到」
-- 人物关系段在至少解锁一个角色后显示
-
-### 如何新增角色
-
-1. 在 `people_story/` 下新建 `.txt` 文件，使用 `===CHARACTER_NNN===` 分隔剧情片段
-2. 在 `config_other/people_relationship.json` 中添加该角色的数据条目
-3. 在 `plugin.py` 的 `_do_explore` 中该角色出现的楼层区域添加触发逻辑
-4. 重载插件生效
+<!-- 人物关系图、如何新增角色等已移至上方任务系统前的同名章节 -->
 
 ## 数据持久化（存档系统）
 
@@ -588,7 +659,15 @@ backrooms_escape/
   ],
   "game_started": true,
   "exit_attempts": 2,
-  "pending_note": null
+  "pending_note": null,
+  "unlocked_chars": ["ankexin"],
+  "currency": 85,
+  "active_quests": ["M001"],
+  "completed_quests": [],
+  "pending_quest_offer": null,
+  "available_works": ["W001", "W002"],
+  "completed_works": [],
+  "work_stories": []
 }
 ```
 
@@ -602,6 +681,14 @@ backrooms_escape/
 | `game_started` | bool | 游戏是否进行中 |
 | `exit_attempts` | int | 当前楼层寻找出口的累计次数 |
 | `pending_note` | string\|null | 待阅读的纸条内容，无则为 null |
+| `unlocked_chars` | array | 已解锁的角色 ID 列表 |
+| `currency` | int | M.E.G.CN 贡献点余额 |
+| `active_quests` | array | 进行中的任务 ID 列表 |
+| `completed_quests` | array | 已完成的任务 ID 列表 |
+| `pending_quest_offer` | string\|null | 待接受的任务 ID |
+| `available_works` | array | 基地可用工作 ID 列表 |
+| `completed_works` | array | 已完成的工作 ID 列表 |
+| `work_stories` | array | 已解锁的工作故事 ID 列表 |
 
 ### 自动保存时机
 
@@ -614,6 +701,8 @@ backrooms_escape/
 | 寻找出口完成 | `/br exit`（无论是否找到出口） |
 | 使用物品后 | `/br use <编号>` |
 | 查看状态后 | `/br status` |
+| 接受/提交任务 | `/br quest accept <ID>` / `/br quest submit <ID>` |
+| 完成基地工作 | `/br work answer <ID> <答案>` |
 | 插件卸载 | 插件被重载或 MaiBot 关闭时，批量保存所有在线玩家 |
 
 ### 存档清除时机
