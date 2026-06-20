@@ -517,7 +517,7 @@ backrooms_escape/
 │   ├── ankexin.txt       ← 安可欣（信息分析组探员，7段剧情）
 │   └── anjinian.txt      ← 安继年（工程部技师，7段剧情）
 ├── config_other/
-│   └── people_relationship.txt  ← 人物关系配置文件
+│   └── people_relationship.json  ← 人物关系配置文件（JSON 格式）
 └── ...
 ```
 
@@ -535,7 +535,7 @@ backrooms_escape/
 
 ### 人物关系图
 
-`/br people_net` 命令查看已解锁角色的人物关系图。数据来源为 `config_other/people_relationship.txt`。
+`/br people_net` 命令查看已解锁角色的人物关系图。数据来源为 `config_other/people_relationship.json`。
 
 - 仅已解锁的角色会显示完整信息
 - 未解锁的角色显示为「??? —— 尚未遇到」
@@ -544,7 +544,7 @@ backrooms_escape/
 ### 如何新增角色
 
 1. 在 `people_story/` 下新建 `.txt` 文件，使用 `===CHARACTER_NNN===` 分隔剧情片段
-2. 在 `config_other/people_relationship.txt` 中添加该角色的背景介绍
+2. 在 `config_other/people_relationship.json` 中添加该角色的数据条目
 3. 在 `plugin.py` 的 `_do_explore` 中该角色出现的楼层区域添加触发逻辑
 4. 重载插件生效
 

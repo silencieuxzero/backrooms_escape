@@ -175,25 +175,23 @@ class BackroomsRenderer:
         ]
 
     def render_use_item(
-        self, item: dict, ctx: RenderContext, remaining_items: list[str]
+        self, item: dict, ctx: RenderContext, remaining_items: list[str],
+        old_health: int = 0, old_sanity: int = 0,
     ) -> str:
         """物品使用结果。"""
         display = item.get("display_name", item["name"])
         effect = item.get("effect", "")
-        value = item.get("value", 0)
         lines = [f"你使用了【{display}】。"]
 
         if effect == "health_restore":
-            new_hp = min(ctx.initial_health, ctx.health + value)
-            restored = new_hp - ctx.health
+            restored = ctx.health - old_health
             lines.append(
-                f"❤️ 生命值恢复了 {restored} 点（当前：{new_hp}/{ctx.initial_health}）。"
+                f"❤️ 生命值恢复了 {restored} 点（当前：{ctx.health}/{ctx.initial_health}）。"
             )
         elif effect == "sanity_restore":
-            new_sp = min(ctx.initial_sanity, ctx.sanity + value)
-            restored = new_sp - ctx.sanity
+            restored = ctx.sanity - old_sanity
             lines.append(
-                f"🧠 理智值恢复了 {restored} 点（当前：{new_sp}/{ctx.initial_sanity}）。"
+                f"🧠 理智值恢复了 {restored} 点（当前：{ctx.sanity}/{ctx.initial_sanity}）。"
             )
         elif effect == "light":
             lines.append("🔦 手电筒已装备，将在探索中自动生效（驱散笑魇、+5% 出口发现率）。")
@@ -442,43 +440,56 @@ class BackroomsRenderer:
             "祝你好运，M.E.G.CN 探员！后室等着你去征服。"
         )
 
-    def render_people_net(self, people_net_text: str, unlocked_chars: set[str]) -> str:
+    def render_people_net(self, people_data: dict[str, dict], unlocked_chars: set[str]) -> str:
         """人物关系图。
 
         Args:
-            people_net_text: config_other/people_relationship.txt 完整内容。
+            people_data: config_other/people_relationship.json 解析后的数据。
             unlocked_chars: 玩家已解锁的角色 ID 集合。
 
         Returns:
             格式化后的人物关系文本。
         """
         lines = ["══════════════════════\n  🕸️ 人物关系图\n══════════════════════\n"]
-        # 始终显示已知人物
-        known = {"ankexin": "安可欣", "anjinian": "安继年"}
-        for cid, cname in known.items():
+        if not people_data:
+            lines.append("暂无人物数据。")
+            return "\n".join(lines)
+
+        # 显示每个角色
+        for cid, info in people_data.items():
+            cname = info.get("name", cid)
             if cid in unlocked_chars:
                 lines.append(f"✅ {cname} —— 已解锁")
             else:
                 lines.append(f"❓ ??? —— 尚未遇到")
+
         lines.append("")
         lines.append("人物背景与关系：")
-        # 只显示已解锁角色的相关信息
-        sections = people_net_text.split("\n\n")
-        for section in sections:
-            if not section.strip():
+
+        # 只显示已解锁角色的详细信息
+        for cid, info in people_data.items():
+            if cid not in unlocked_chars:
                 continue
-            # 检查该段是否涉及已解锁角色
-            show_section = False
-            for cid, cname in known.items():
-                if cid in unlocked_chars and cname in section:
-                    show_section = True
-                    break
-            if section.startswith("人物关系"):
-                # 只有当至少一个角色解锁时才显示关系
-                if unlocked_chars:
-                    show_section = True
-            if show_section:
-                lines.append(section)
+            cname = info.get("name", cid)
+            lines.append(f"━━━━━━━━━━━━━━━━━━━━")
+            lines.append(f"{cname}（{cid}）")
+            lines.append(f"身份：{info.get('identity', '未知')}")
+            lines.append(f"年龄：{info.get('age', '未知')} 岁")
+            lines.append(f"关系：{info.get('relationship', '未知')}")
+            lines.append(f"状态：{info.get('status', '未知')}")
+            lines.append(f"首次发现：{info.get('first_encounter', '未知')}")
+            lines.append("")
+            lines.append(info.get("description", ""))
+
+        # 关系连线
+        if unlocked_chars:
+            lines.append("")
+            lines.append("人物关系：")
+            for cid, info in people_data.items():
+                if cid in unlocked_chars and info.get("relationship"):
+                    lines.append(f"  · {info['name']} 与 {info['relationship']}")
+
+        return "\n".join(lines)
         return "\n".join(lines)
 
     def render_test(self) -> str:

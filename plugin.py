@@ -55,10 +55,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.0.6"
+PLUGIN_VERSION = "1.0.7"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.0.6"
+SAVE_VERSION = "1.0.7"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -473,15 +473,15 @@ class BackroomsGamePlugin(MaiBotPlugin):
         }
 
     @staticmethod
-    def _load_people_net() -> str:
-        """从 config_other/people_relationship.txt 加载人物关系文本。"""
-        file_path = Path(__file__).parent / "config_other" / "people_relationship.txt"
+    def _load_people_net() -> dict[str, dict]:
+        """从 config_other/people_relationship.json 加载人物数据。"""
+        file_path = Path(__file__).parent / "config_other" / "people_relationship.json"
         if not file_path.is_file():
-            return "暂无人物关系数据。"
+            return {}
         try:
-            return file_path.read_text(encoding="utf-8").strip()
-        except OSError:
-            return "人物关系文件读取失败。"
+            return json.loads(file_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
 
     @Command(
         "br_start",
@@ -1248,6 +1248,10 @@ class BackroomsGamePlugin(MaiBotPlugin):
         effect = item.get("effect", "")
         value = item.get("value", 0)
 
+        # 记录使用前数值，用于计算实际恢复量
+        old_health = player.health
+        old_sanity = player.sanity
+
         if effect == "health_restore":
             player.health = min(cfg.initial_health, player.health + value)
         elif effect == "sanity_restore":
@@ -1258,7 +1262,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         await self._send(
             stream_id,
-            self._renderer.render_use_item(item, ctx, remaining),
+            self._renderer.render_use_item(item, ctx, remaining, old_health, old_sanity),
         )
         self._save_player(user_id)
 

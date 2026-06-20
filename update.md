@@ -1,5 +1,12 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.0.7 (2026-06-20)
+
+### 变更
+- 人物数据由 `people_relationship.txt` 改为 `people_relationship.json` 结构化存储
+- `/br people_net` 渲染器改为直接解析 JSON 数据，输出格式化人物卡
+- 版本号统一更新至 `1.0.7`
+
 ## v1.0.6 (2026-06-20)
 
 ### 变更
