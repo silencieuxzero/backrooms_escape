@@ -22,8 +22,8 @@ from .renderer import BackroomsRenderer, RenderContext
 
 # ==================== 外部数据文件 ====================
 
-_BACKROOMS_DATA_PATH = Path(__file__).parent.parent / "backrooms_data.json"
-"""根目录下的物品/实体数据文件路径。"""
+_BACKROOMS_DATA_PATH = Path(__file__).parent / "backrooms_data.json"
+"""插件目录下的物品/实体数据文件路径。"""
 
 _backrooms_data: dict = {}
 ITEMS_POOL: list[dict] = []
