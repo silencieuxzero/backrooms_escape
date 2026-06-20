@@ -58,7 +58,7 @@ output_mode = "text"      # 普通文本消息（默认）
 | `/br explore` | 探索当前楼层 |
 | `/br exit` | 尝试寻找出口 |
 | `/br read` | 阅读捡到的纸条（合并转发消息） |
-| `/br use <物品>` | 使用物品，如 `/br use o1` |
+| `/br use <编号>` | 使用物品，如 `/br use 1` |
 | `/br status` | 查看探员状态 |
 | `/br inventory` | 查看背包 |
 | `/br help` | 游戏帮助 |

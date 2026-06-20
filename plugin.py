@@ -20,12 +20,45 @@ from .config import BackroomsGameConfig
 from .story import StoryManager, PeopleStoryManager
 from .renderer import BackroomsRenderer, RenderContext
 
+# ==================== 外部数据文件 ====================
+
+_BACKROOMS_DATA_PATH = Path(__file__).parent.parent / "backrooms_data.json"
+"""根目录下的物品/实体数据文件路径。"""
+
+_backrooms_data: dict = {}
+ITEMS_POOL: list[dict] = []
+ENTITIES: dict[str, dict] = {}
+
+
+def _load_backrooms_data() -> None:
+    """加载 backrooms_data.json 到模块全局变量。"""
+    global _backrooms_data, ITEMS_POOL, ENTITIES
+    fp = _BACKROOMS_DATA_PATH
+    if not fp.is_file():
+        raise FileNotFoundError(f"缺少数据文件: {fp}，请确保 backrooms_data.json 存在于插件根目录。")
+    try:
+        _backrooms_data = json.loads(fp.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise RuntimeError(f"读取 backrooms_data.json 失败: {exc}") from exc
+
+    ITEMS_POOL = _backrooms_data.get("items", [])
+    ENTITIES = _backrooms_data.get("entities", {})
+    if not ITEMS_POOL:
+        raise RuntimeError("backrooms_data.json 中缺少 items 数据")
+    if not ENTITIES:
+        raise RuntimeError("backrooms_data.json 中缺少 entities 数据")
+
+
+# 模块导入时加载数据
+_load_backrooms_data()
+
+
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.0.5"
+PLUGIN_VERSION = "1.0.6"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.0.5"
+SAVE_VERSION = "1.0.6"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -194,83 +227,6 @@ ICONIC_LEVELS: dict[int, dict[str, Any]] = {
         "shortcut_to": None,
     },
 }
-
-# 实体定义
-ENTITIES = {
-    "笑魇": {
-        "damage": 15,
-        "description": "一种在黑暗中出现的无面人形实体，会发出诡异的笑声。",
-    },
-    "猎犬": {
-        "damage": 20,
-        "description": "四足爬行的猛兽，速度极快，会追踪猎物。",
-    },
-    "窃皮者": {
-        "damage": 25,
-        "description": "一种会剥取人类皮肤的恐怖实体，极其危险。",
-    },
-    "死亡飞蛾": {
-        "damage": 10,
-        "description": "巨型飞蛾，翅膀上的花纹会让人产生幻觉。",
-    },
-    "镜像实体": {
-        "damage": 20,
-        "description": "潜伏在镜子中的实体，会引诱你靠近镜子。",
-    },
-    "旅馆管理者": {
-        "damage": 30,
-        "description": "Level 5 的主人，穿着老式西装，永远微笑着。",
-    },
-    "深海之物": {
-        "damage": 35,
-        "description": "深海中不可名状的巨大生物，光是注视就会让人发狂。",
-    },
-    "洞穴爬行者": {
-        "damage": 15,
-        "description": "在洞穴墙壁上快速爬行的实体，数量众多。",
-    },
-    "邻里守望者": {
-        "damage": 20,
-        "description": "Level 9 的居民，总是在窗户后面盯着你。",
-    },
-    "麦田守望者": {
-        "damage": 15,
-        "description": "矗立在麦田中的稻草人，会在你不注意时移动。",
-    },
-    "电击实体": {
-        "damage": 25,
-        "description": "Level 3 特有的实体，浑身带电，碰触即会触电。",
-    },
-    "不明巨兽": {
-        "damage": 40,
-        "description": "Level 7 深处的庞然大物，一声低吼就能震碎耳膜。",
-    },
-}
-
-# 物品定义
-ITEMS_POOL = [
-    {"name": "o1", "type": "consumable", "effect": "sanity_restore", "value": 30,
-     "display_name": "杏仁水",
-     "description": "后室中最常见的补给品，喝下可以恢复理智，味道像融化的杏仁冰淇淋。"},
-    {"name": "o2", "type": "consumable", "effect": "health_restore", "value": 30,
-     "display_name": "急救包",
-     "description": "M.E.G. 标准配备的急救包，内含绷带、消毒剂和止痛药。"},
-    {"name": "o3", "type": "equipment", "effect": "light",
-     "display_name": "手电筒",
-     "description": "在黑暗层级中必不可少的工具，可以驱散笑魇，帮助寻找出口。"},
-    {"name": "o4", "type": "consumable", "effect": "exit_guarantee",
-     "display_name": "层级钥匙",
-     "description": "一种稀有的物品，可以确保在当前层级找到出口。"},
-    {"name": "o5", "type": "equipment", "effect": "hint",
-     "display_name": "M.E.G. 无线电",
-     "description": "M.E.G. 标准通讯设备，有时能接收到附近前哨站的信号，提供有用的信息。"},
-    {"name": "o6", "type": "consumable", "effect": "health_restore", "value": 15,
-     "display_name": "能量棒",
-     "description": "M.E.G. 配发的能量补给，虽然不好吃但能补充体力。"},
-    {"name": "o7", "type": "consumable", "effect": "sanity_restore", "value": 15,
-     "display_name": "镇定剂",
-     "description": "小剂量的精神药物，能在紧张的环境中帮你保持冷静。"},
-]
 
 # 探索事件
 EXPLORE_EVENTS = [
@@ -604,32 +560,31 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     @Command(
         "br_inventory",
-        description="查看背包 / 使用物品 — 显示携带的物品，或使用 /br inventory <编号> 消耗物品",
-        pattern=r"^/br\s+inventory",
+        description="查看背包 — 显示携带的物品",
+        pattern=r"^/br\s+inventory$",
     )
     async def handle_inventory(self, **kwargs: Any):
-        """查看背包或使用物品。"""
-
+        """查看背包。"""
         stream_id = kwargs.get("stream_id", "")
-
-        # 从 message 字典中获取原始命令文本
-        message = kwargs.get("message", {})
-        raw_text = str(
-            message.get("raw_message")
-            or message.get("text")
-            or message.get("message")
-            or ""
-        )
-        # 尝试提取尾部的数字 → /br inventory <编号>
-        m = re.search(r"/br\s+inventory\s+(\d+)\s*$", raw_text)
-        if m:
-            item_index = int(m.group(1))
-            await self._do_use_item(stream_id, item_index)
-            return True, f"物品 {item_index} 已使用", 1
-
-        # 无编号 → 显示背包
         await self._do_show_inventory(stream_id)
         return True, "背包已显示", 1
+
+    @Command(
+        "br_use",
+        description="使用物品 — 按背包编号消耗物品",
+        pattern=r"^/br\s+use\s+(\d+)$",
+    )
+    async def handle_use(self, **kwargs: Any):
+        """使用背包物品。"""
+        stream_id = kwargs.get("stream_id", "")
+        match_result = kwargs.get("match_result")
+        if not match_result:
+            await self._send(stream_id, self._renderer.render_no_item_specified())
+            return True, "未指定物品", 1
+
+        item_index = int(match_result.group(1))
+        await self._do_use_item(stream_id, item_index)
+        return True, f"物品 {item_index} 已使用", 1
 
     @Command(
         "br_help",
@@ -1565,9 +1520,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if self._has_item(player, "o4"):
             hints.append("🔑 你持有层级钥匙！使用 /br exit 可以 100% 找到出口。")
         if self._has_item(player, "o1") and player.sanity < 50:
-            hints.append("🧠 理智值偏低，使用 /br inventory <编号> 可以恢复。")
+            hints.append("🧠 理智值偏低，使用 /br use <编号> 可以恢复。")
         if self._has_item(player, "o2") and player.health < 50:
-            hints.append("❤️ 生命值偏低，使用 /br inventory <编号> 派得上用场。")
+            hints.append("❤️ 生命值偏低，使用 /br use <编号> 派得上用场。")
         if self._has_item(player, "o3"):
             hints.append("🔦 手电筒能驱散笑魇，+5% 出口发现率。")
 
