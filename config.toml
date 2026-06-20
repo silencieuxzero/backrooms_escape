@@ -2,7 +2,7 @@
 enabled = true
 # 消息输出模式：text=普通消息，forward=合并转发消息
 output_mode = "text"
-config_version = "2.0.0"
+config_version = "1.0.3"
 
 [game]
 # 初始生命值

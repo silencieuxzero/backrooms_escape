@@ -19,6 +19,14 @@ from .config import BackroomsGameConfig
 from .story import StoryManager, PeopleStoryManager
 from .renderer import BackroomsRenderer, RenderContext
 
+# ==================== 版本常量 ====================
+
+PLUGIN_VERSION = "1.0.3"
+"""插件版本号（与 _manifest.json 同步）。"""
+
+SAVE_VERSION = "1.0.3"
+"""存档数据格式版本号，用于存档迁移兼容。"""
+
 
 # ==================== 游戏数据 ====================
 
@@ -355,9 +363,17 @@ class BackroomsGamePlugin(MaiBotPlugin):
         # 加载人物关系文件
         self._people_net_text = self._load_people_net()
 
-        # 恢复已有玩家存档
+        # ---- 版本迁移检查 ----
+
+        # 检测配置版本并自动迁移
+        await self._migrate_config_if_needed()
+
+        # 恢复已有玩家存档（含自动迁移）
         self._load_all_players()
-        self.ctx.logger.info("已从 br_data 恢复 %d 位玩家存档", len(self._players))
+        self.ctx.logger.info(
+            "已从 br_data 恢复 %d 位玩家存档 (存档格式版本: %s)",
+            len(self._players), SAVE_VERSION,
+        )
 
         # 输出故事加载状态
         self.ctx.logger.info(
@@ -383,10 +399,20 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._players.clear()
 
     async def on_config_update(self, scope: str, config_data: dict[str, object], version: str) -> None:
-        """处理配置热重载。"""
-        del scope
+        """处理配置热重载，检测版本变更并执行配置迁移。"""
         del config_data
         del version
+        self.ctx.logger.info("配置已更新 (scope=%s)", scope)
+
+        # 检测热重载后的配置版本，必要时迁移
+        current_ver = self.config.plugin.config_version
+        if current_ver != PLUGIN_VERSION:
+            self.ctx.logger.info(
+                "配置热重载检测到旧版配置 (config_version=%s)，正在迁移至 %s……",
+                current_ver, PLUGIN_VERSION,
+            )
+            self.config.plugin.config_version = PLUGIN_VERSION
+            self.ctx.logger.info("配置已迁移至 %s", PLUGIN_VERSION)
 
     # ==================== 游戏命令（@Command 组件） ====================
 
@@ -920,6 +946,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if player is None:
             return
         data = {
+            "save_version": SAVE_VERSION,
             "user_id": player.user_id,
             "current_level": player.current_level,
             "health": player.health,
@@ -946,6 +973,10 @@ class BackroomsGamePlugin(MaiBotPlugin):
         except (json.JSONDecodeError, OSError) as exc:
             self.ctx.logger.error("读取玩家存档失败 user_id=%s: %s", user_id, exc)
             return None
+
+        # 自动迁移旧版存档到当前格式
+        data = self._migrate_save_data(data)
+
         return PlayerState(
             user_id=data.get("user_id", user_id),
             current_level=data.get("current_level", 0),
@@ -978,6 +1009,53 @@ class BackroomsGamePlugin(MaiBotPlugin):
             player = self._load_player(user_id)
             if player is not None:
                 self._players[user_id] = player
+
+    # ==================== 存档迁移 ====================
+
+    @staticmethod
+    def _migrate_save_data(data: dict) -> dict:
+        """将旧版存档数据迁移至当前存档格式。
+
+        旧版存档（v1.0.1 / v1.0.2）没有 ``save_version`` 字段。
+        该方法作为扩展点，后续版本如有存档格式变更，
+        在此处添加对应版本的分支迁移逻辑即可。
+
+        Args:
+            data: 从 JSON 加载的原始存档字典。
+
+        Returns:
+            迁移后的存档字典（当前格式）。
+        """
+        save_version = data.get("save_version", "0.0.0")
+
+        if save_version == "0.0.0":
+            # 无版本号存档（v1.0.1 / v1.0.2 格式）
+            # 当前格式与旧版兼容，无需字段变更
+            pass
+
+        # 标记为当前版本
+        data["save_version"] = SAVE_VERSION
+        return data
+
+    async def _migrate_config_if_needed(self) -> None:
+        """检测配置文件版本，必要时执行配置迁移。
+
+        当 ``config.toml`` 中的 ``config_version`` 低于当前插件版本时，
+        记录日志并执行已知的配置字段迁移。
+        此方法仅在 ``on_load`` 中调用一次。
+        """
+        current_ver = self.config.plugin.config_version
+        if current_ver != PLUGIN_VERSION:
+            self.ctx.logger.info(
+                "检测到旧版配置文件 (config_version=%s)，正在迁移至 %s……",
+                current_ver, PLUGIN_VERSION,
+            )
+            # 在此处添加未来版本的配置迁移逻辑：
+            # 例如字段重命名、默认值变更后的补偿处理等
+            self.config.plugin.config_version = PLUGIN_VERSION
+            self.ctx.logger.info("配置文件已迁移至 %s", PLUGIN_VERSION)
+        else:
+            self.ctx.logger.info("配置文件版本为最新 (%s)", PLUGIN_VERSION)
 
     def _get_player(self, user_id: str) -> PlayerState | None:
         """获取玩家状态。"""
