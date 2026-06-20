@@ -136,7 +136,7 @@ class GameConfig(PluginConfigBase):
         description="中型物资箱出现概率",
         json_schema_extra={
             "label": "中型物资箱概率",
-            "hint": "触发补给事件时出现中型物资箱的概率。中型箱 80% 概率出杏仁水。",
+            "hint": "触发补给事件时出现中型物资箱的概率。中型箱必出杏仁水。",
             "order": 9,
         },
     )
@@ -145,7 +145,7 @@ class GameConfig(PluginConfigBase):
         description="小型物资箱出现概率",
         json_schema_extra={
             "label": "小型物资箱概率",
-            "hint": "触发补给事件时出现小型物资箱的概率。小型箱 60% 概率出杏仁水。",
+            "hint": "触发补给事件时出现小型物资箱的概率。小型箱必出杏仁水。",
             "order": 10,
         },
     )

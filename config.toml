@@ -22,7 +22,7 @@ entity_encounter_chance = 0.25
 
 # ---- 物资箱概率 ----
 # 触发补给事件时各类物资箱的出现概率
-# 大型箱：必出杏仁水；中型箱：80% 出杏仁水；小型箱：60% 出杏仁水
+# 大型箱：必出杏仁水；中型箱：必出杏仁水；小型箱：必出杏仁水
 crate_large_chance = 0.08
 crate_medium_chance = 0.15
 crate_small_chance = 0.25

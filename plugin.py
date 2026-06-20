@@ -1138,15 +1138,11 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if crate_size is None:
             return None
 
-        # 杏仁水概率
-        almond_chance = {"大型物资箱": 1.0, "中型物资箱": 0.8, "小型物资箱": 0.6}[crate_size]
-
         items: list[dict] = []
-        if random.random() < almond_chance:
-            almond_water = {"name": "o1", "type": "consumable", "effect": "sanity_restore", "value": 30,
-                            "display_name": "杏仁水",
-                            "description": "后室中最常见的补给品，喝下可以恢复理智，味道像融化的杏仁冰淇淋。"}
-            items.append(dict(almond_water))
+        almond_water = {"name": "o1", "type": "consumable", "effect": "sanity_restore", "value": 30,
+                        "display_name": "杏仁水",
+                        "description": "后室中最常见的补给品，喝下可以恢复理智，味道像融化的杏仁冰淇淋。"}
+        items.append(dict(almond_water))
 
         # 额外随机物品（使用权重系统）
         extra = self._random_item()
