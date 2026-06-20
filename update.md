@@ -1,5 +1,20 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.0.9 (2026-06-20)
+
+### 新增
+- `/br shut` 命令：管理员可静默群聊，静默后群内非 `/br` 消息不会触发 Planner/LLM 处理
+- `shut.py` 模块：ShutManager 管理静默群组列表，持久化到 `br_data/shut_groups.json`
+
+### 变更
+- 管理员系统重构：`admin_id` 改为 `admin_ids` 列表，支持多位管理员
+- 管理员只能通过修改 `config.toml` 来增减，无法通过命令自任命
+- 版本号统一更新至 `1.0.9`
+
+### 修复
+- 修复 `render_exit_found` 使用错误楼层信息显示搜索消息的 bug：找到出口后 `ctx.level_info` 已指向新楼层，导致"你仔细搜索着 XXX 的每一个角落……"显示的楼层名与实际不符
+- 移除 `_get_or_create_player` 死代码（定义但从未被调用）
+
 ## v1.0.8 (2026-06-20)
 
 ### 新增

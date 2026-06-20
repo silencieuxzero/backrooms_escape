@@ -2,9 +2,10 @@
 enabled = true
 # 消息输出模式：text=普通消息，forward=合并转发消息
 output_mode = "text"
-# 管理员QQ号（留空则由首个使用 /br off 的用户自动成为管理员）
-admin_id = ""
-config_version = "1.0.8"
+# 管理员QQ号列表（只能通过修改配置文件来增减管理员）
+# 留空则无人可管理插件
+admin_ids = []
+config_version = "1.0.9"
 
 [game]
 # 初始生命值

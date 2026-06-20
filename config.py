@@ -32,17 +32,17 @@ class PluginSectionConfig(PluginConfigBase):
             "order": 1,
         },
     )
-    admin_id: str = Field(
-        default="",
-        description="管理员QQ号（留空则由首个使用 /br off 的用户自动成为管理员）",
+    admin_ids: list[str] = Field(
+        default_factory=list,
+        description="管理员QQ号列表（只能通过修改配置文件来增减管理员）",
         json_schema_extra={
-            "label": "管理员QQ号",
-            "hint": "在此填写管理员的 QQ 号。配置后只有该用户可以使用 /br off 和 /br on 命令。留空则由首个执行 /br off 的用户自动成为管理员。",
+            "label": "管理员QQ号列表",
+            "hint": "在此填写管理员的 QQ 号（每行一个）。只有列表中的用户可以使用 /br off、/br on、/br shut 命令。留空则无人可管理。",
             "order": 2,
         },
     )
     config_version: str = Field(
-        default="1.0.8",
+        default="1.0.9",
         description="配置版本（与插件版本同步）",
         json_schema_extra={
             "label": "配置版本",

@@ -19,6 +19,7 @@ from maibot_sdk.types import HookMode, HookOrder, ErrorPolicy
 from .config import BackroomsGameConfig
 from .story import StoryManager, PeopleStoryManager, QuestManager, WorkManager, BaseWorkStoryManager
 from .renderer import BackroomsRenderer, RenderContext
+from .shut import ShutManager
 
 # ==================== 外部数据文件 ====================
 
@@ -55,10 +56,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.0.8"
+PLUGIN_VERSION = "1.0.9"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.0.8"
+SAVE_VERSION = "1.0.9"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -321,22 +322,32 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._work_story_manager = BaseWorkStoryManager()
         self._renderer = BackroomsRenderer()
         self._plugin_disabled: bool = False
-        self._admin_id: str = ""
+        self._admin_ids: set[str] = set()
 
         # 创建持久化数据目录
         self._data_dir = Path(__file__).parent / "br_data"
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self.ctx.logger.info("br_data 目录已就绪: %s", self._data_dir)
 
+        # 初始化群聊静默管理器
+        self._shut_manager = ShutManager(self._data_dir)
+        self.ctx.logger.info(
+            "已加载 %d 个静默群组: %s",
+            len(self._shut_manager.list_shut()),
+            self._shut_manager.list_shut() or "无",
+        )
+
         # 加载人物关系文件
         self._people_net_text = self._load_people_net()
 
-        # 从配置读取管理员 ID
-        self._admin_id = self.config.plugin.admin_id.strip()
-        if self._admin_id:
-            self.ctx.logger.info("管理员已配置: user_id=%s", self._admin_id)
+        # 从配置读取管理员 ID 列表（只能通过修改配置文件来增减）
+        self._admin_ids = set(
+            uid.strip() for uid in self.config.plugin.admin_ids if uid.strip()
+        )
+        if self._admin_ids:
+            self.ctx.logger.info("管理员已配置: %s", sorted(self._admin_ids))
         else:
-            self.ctx.logger.info("未配置管理员，首个使用 /br off 的用户将自动成为管理员")
+            self.ctx.logger.info("未配置管理员，无用户可执行管理操作")
 
         # ---- 版本迁移检查 ----
 
@@ -378,6 +389,12 @@ class BackroomsGamePlugin(MaiBotPlugin):
         del config_data
         del version
         self.ctx.logger.info("配置已更新 (scope=%s)", scope)
+
+        # 热重载后重新读取管理员列表
+        self._admin_ids = set(
+            uid.strip() for uid in self.config.plugin.admin_ids if uid.strip()
+        )
+        self.ctx.logger.info("管理员列表已刷新: %s", sorted(self._admin_ids) if self._admin_ids else "空")
 
         # 检测热重载后的配置版本，必要时迁移
         current_ver = self.config.plugin.config_version
@@ -432,7 +449,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             or message.get("message")
             or ""
         )
-        m = re.search(r"/br\s+story\s+(\S+)", raw_text)
+        m = re.search(r"/br\s+story\s+(\w+)", raw_text)
         if m:
             story_id = m.group(1)
             await self._do_story_view(stream_id, story_id)
@@ -624,6 +641,18 @@ class BackroomsGamePlugin(MaiBotPlugin):
         return True, "插件启用处理完成", 1
 
     @Command(
+        "br_shut",
+        description="管理员开关群聊静默 — 静默后群内非 /br 消息不会触发 Planner",
+        pattern=r"^/br\s+shut(\s+\S+)?$",
+    )
+    async def handle_shut(self, **kwargs: Any):
+        """管理员切换群聊静默状态。"""
+        stream_id = kwargs.get("stream_id", "")
+        message = kwargs.get("message", {})
+        await self._do_shut(stream_id, message)
+        return True, "群聊静默处理完成", 1
+
+    @Command(
         "br_quest",
         description="任务系统 — 查看任务 / 接受任务 / 提交任务",
         pattern=r"^/br\s+quest",
@@ -638,11 +667,11 @@ class BackroomsGamePlugin(MaiBotPlugin):
             or message.get("message")
             or ""
         )
-        m = re.search(r"/br\s+quest\s+accept\s+(\S+)", raw_text)
+        m = re.search(r"/br\s+quest\s+accept\s+(\w+)", raw_text)
         if m:
             await self._do_quest_accept(stream_id, m.group(1))
             return True, "任务接受处理完成", 1
-        m = re.search(r"/br\s+quest\s+submit\s+(\S+)", raw_text)
+        m = re.search(r"/br\s+quest\s+submit\s+(\w+)", raw_text)
         if m:
             await self._do_quest_submit(stream_id, m.group(1))
             return True, "任务提交处理完成", 1
@@ -664,11 +693,11 @@ class BackroomsGamePlugin(MaiBotPlugin):
             or message.get("message")
             or ""
         )
-        m = re.search(r"/br\s+work\s+start\s+(\S+)", raw_text)
+        m = re.search(r"/br\s+work\s+start\s+(\w+)", raw_text)
         if m:
             await self._do_work_start(stream_id, m.group(1))
             return True, "工作开始处理完成", 1
-        m = re.search(r"/br\s+work\s+answer\s+(\S+)\s+(.+)", raw_text)
+        m = re.search(r"/br\s+work\s+answer\s+(\w+)\s+(.+)", raw_text)
         if m:
             await self._do_work_answer(stream_id, m.group(1), m.group(2).strip())
             return True, "工作答案处理完成", 1
@@ -900,7 +929,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         # 插件禁用检查：禁用状态下仅管理员可继续使用
         if self._plugin_disabled:
-            if command_name not in ("br_off", "br_on") and user_id != self._admin_id:
+            if command_name not in ("br_off", "br_on") and user_id not in self._admin_ids:
                 self.ctx.logger.info(
                     "access_check: 插件已禁用，拒绝非管理员 user_id=%s command_name=%s",
                     user_id, command_name,
@@ -927,6 +956,47 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self.ctx.logger.debug("skip_planner: 标记命令 %s 已处理", command_name)
         # 修改返回结果阻止进一步处理
         return {"result": (True, "命令已处理", 1)}
+
+    @HookHandler(
+        "chat.receive.before_process",
+        name="br_shut_check",
+        description="检查消息所在群组是否被 shut，阻止非 /br 消息进入 Planner",
+        mode=HookMode.BLOCKING,
+        order=HookOrder.EARLY,
+        error_policy=ErrorPolicy.LOG,
+    )
+    async def check_shut_before_process(self, **kwargs: Any):
+        """在消息处理前检查群组是否被静默。
+
+        被静默的群组中，只有 /br 命令可以继续处理，
+        其余消息全部终止在本 hook，不进入 Planner/LLM 处理链。
+        """
+        message = kwargs.get("message", {})
+        if not message:
+            return {"action": "continue"}
+
+        raw_text = str(message.get("raw_message", "") or "")
+
+        # /br 命令放行，让游戏插件正常处理
+        if raw_text.startswith("/br"):
+            return {"action": "continue"}
+
+        # 解析访问 ID
+        stream_id = str(kwargs.get("stream_id", "") or message.get("stream_id", ""))
+        resolved = self._resolve_access_id(message, stream_id)
+        if resolved is None:
+            return {"action": "continue"}
+
+        chat_type, chat_id = resolved
+        if chat_type != "group":
+            return {"action": "continue"}
+
+        # 检查是否被静默
+        if self._shut_manager.is_shut(chat_id):
+            self.ctx.logger.debug("shut: 拦截群 %s 的非 /br 消息", chat_id)
+            return {"action": "abort"}
+
+        return {"action": "continue"}
 
     # ==================== 辅助方法 ====================
 
@@ -1113,12 +1183,6 @@ class BackroomsGamePlugin(MaiBotPlugin):
             )
             return await self.ctx.send.text(combined, stream_id)
         return await self.ctx.send.text(text, stream_id)
-
-    def _get_or_create_player(self, user_id: str) -> PlayerState:
-        """获取或创建玩家状态。"""
-        if user_id not in self._players:
-            self._players[user_id] = PlayerState(user_id=user_id)
-        return self._players[user_id]
 
     def _get_level_info(self, level: int) -> dict[str, Any]:
         """获取楼层信息。"""
@@ -1516,6 +1580,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
             shortcut_desc: str | None = None
 
+            # 保存旧楼层信息（用于渲染出口搜索消息）
+            old_level_info = self._get_level_info(from_level)
+
             level_info = self._get_level_info(player.current_level)
             shortcut = level_info.get("shortcut_to")
             if not shortcut and random.random() < 0.12 and player.current_level < 380:
@@ -1539,7 +1606,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             ctx = self._make_ctx(player)
             await self._send(
                 stream_id,
-                self._renderer.render_exit_found(ctx, new_level_info, shortcut_desc, from_level),
+                self._renderer.render_exit_found(old_level_info, ctx, new_level_info, shortcut_desc, from_level),
             )
 
             # 检测任务进度：到达目标楼层
@@ -1884,27 +1951,21 @@ class BackroomsGamePlugin(MaiBotPlugin):
         )
 
     async def _do_off(self, stream_id: str, message: dict) -> None:
-        """关闭插件：仅管理员可用，禁用后仅管理员可继续使用。"""
+        """关闭插件：仅管理员可用，禁用后仅管理员可继续使用。
+
+        管理员只能通过修改配置文件来增减，无法通过命令自任命。
+        """
         user_id = self._resolve_user_id(message, stream_id)
         if not user_id:
             await self._send(stream_id, "❌ 无法识别你的身份，不能执行此操作。")
             return
 
-        # 未配置管理员：首个关闭者自动成为管理员
-        if not self._admin_id:
-            self._admin_id = user_id
-            self._plugin_disabled = True
-            self.ctx.logger.info("插件已关闭，管理员 user_id=%s", user_id)
-            await self._send(stream_id, "🔒 插件已关闭。现在只有你可以使用本插件。")
-            return
-
-        # 已配置管理员：验证身份
-        if user_id != self._admin_id:
+        if user_id not in self._admin_ids:
             await self._send(stream_id, "❌ 你不是管理员，无权关闭插件。")
             return
 
         self._plugin_disabled = True
-        self.ctx.logger.info("插件已由管理员重新关闭 user_id=%s", user_id)
+        self.ctx.logger.info("插件已由管理员关闭 user_id=%s", user_id)
         await self._send(stream_id, "🔒 插件已关闭。")
 
     async def _do_on(self, stream_id: str, message: dict) -> None:
@@ -1914,13 +1975,47 @@ class BackroomsGamePlugin(MaiBotPlugin):
             await self._send(stream_id, "❌ 无法识别你的身份，不能执行此操作。")
             return
 
-        if user_id != self._admin_id:
+        if user_id not in self._admin_ids:
             await self._send(stream_id, "❌ 你不是管理员，无权启用插件。")
             return
 
         self._plugin_disabled = False
         self.ctx.logger.info("插件已由管理员重新启用 user_id=%s", user_id)
         await self._send(stream_id, "🔓 插件已重新启用，所有用户均可使用。")
+
+    async def _do_shut(self, stream_id: str, message: dict) -> None:
+        """管理员切换当前群聊的静默状态。
+
+        静默后，群内非 /br 消息不会触发 Planner/LLM 处理。
+        """
+        user_id = self._resolve_user_id(message, stream_id)
+        if not user_id:
+            await self._send(stream_id, "❌ 无法识别你的身份，不能执行此操作。")
+            return
+
+        if user_id not in self._admin_ids:
+            await self._send(stream_id, "❌ 你不是管理员，无权执行此操作。")
+            return
+
+        # 解析当前群组 ID
+        resolved = self._resolve_access_id(message, stream_id)
+        if resolved is None:
+            await self._send(stream_id, "❌ 无法识别当前会话，请确认在群聊中使用此命令。")
+            return
+        chat_type, chat_id = resolved
+        if chat_type != "group":
+            await self._send(stream_id, "❌ /br shut 仅限群聊使用。")
+            return
+
+        # 切换静默状态
+        if self._shut_manager.is_shut(chat_id):
+            self._shut_manager.remove_shut(chat_id)
+            await self._send(stream_id, f"🔊 群 {chat_id} 已取消静默。所有消息恢复正常处理。")
+            self.ctx.logger.info("shut: 管理员 %s 已取消群 %s 静默", user_id, chat_id)
+        else:
+            self._shut_manager.add_shut(chat_id)
+            await self._send(stream_id, f"🔇 群 {chat_id} 已开启静默。非 /br 消息将不再触发 Planner。")
+            self.ctx.logger.info("shut: 管理员 %s 已静默群 %s", user_id, chat_id)
 
 
 def create_plugin() -> BackroomsGamePlugin:

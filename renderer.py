@@ -335,14 +335,14 @@ class BackroomsRenderer:
 
     def render_exit_found(
         self,
+        old_level_info: dict[str, Any],
         ctx: RenderContext,
         new_level_info: dict[str, Any],
         shortcut_desc: str | None,
         from_level: int,
     ) -> str:
         """找到出口时的消息。"""
-        info = ctx.level_info
-        lines = [f"🚪 你仔细搜索着 {info['title']} 的每一个角落……"]
+        lines = [f"🚪 你仔细搜索着 {old_level_info['title']} 的每一个角落……"]
 
         if shortcut_desc:
             lines.append(f"✨ {shortcut_desc}")
