@@ -21,10 +21,10 @@ from .renderer import BackroomsRenderer, RenderContext
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.0.3"
+PLUGIN_VERSION = "1.0.4"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.0.3"
+SAVE_VERSION = "1.0.4"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -363,6 +363,13 @@ class BackroomsGamePlugin(MaiBotPlugin):
         # 加载人物关系文件
         self._people_net_text = self._load_people_net()
 
+        # 从配置读取管理员 ID
+        self._admin_id = self.config.plugin.admin_id.strip()
+        if self._admin_id:
+            self.ctx.logger.info("管理员已配置: user_id=%s", self._admin_id)
+        else:
+            self.ctx.logger.info("未配置管理员，首个使用 /br off 的用户将自动成为管理员")
+
         # ---- 版本迁移检查 ----
 
         # 检测配置版本并自动迁移
@@ -607,20 +614,20 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     @Command(
         "br_use",
-        description="使用物品 — 消耗背包中的物品",
-        pattern=r"^/br\s+use\s+(.+)$",
+        description="使用物品 — 消耗背包中的物品（按编号）",
+        pattern=r"^/br\s+use\s+(\d+)$",
     )
     async def handle_use(self, **kwargs: Any):
         """使用背包物品。"""
         stream_id = kwargs.get("stream_id", "")
         match_result = kwargs.get("match_result")
-        item_name = str(match_result.group(1)).strip() if match_result else ""
-        if not item_name:
+        if not match_result:
             await self._send(stream_id, self._renderer.render_no_item_specified())
             return True, "未指定物品", 1
 
-        await self._do_use(stream_id, item_name)
-        return True, f"物品 {item_name} 使用完成", 1
+        item_index = int(match_result.group(1))
+        await self._do_use(stream_id, item_index)
+        return True, f"物品 {item_index} 使用完成", 1
 
     @Command(
         "br_help",
@@ -1261,24 +1268,25 @@ class BackroomsGamePlugin(MaiBotPlugin):
         ]
         await self._send(stream_id, "", nodes=nodes)
 
-    async def _do_use(self, stream_id: str, item_name: str) -> None:
-        """使用背包物品。"""
+    async def _do_use(self, stream_id: str, item_index: int) -> None:
+        """使用背包物品（按编号）。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
         if not player or not player.game_started:
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
-        cfg = self.config.game
-        item = self._use_item(player, item_name)
-        if not item:
+        if item_index < 1 or item_index > len(player.inventory):
             await self._send(
                 stream_id,
-                self._renderer.render_item_not_found(self._item_display_name(item_name)),
+                self._renderer.render_item_not_found(str(item_index)),
             )
             return
 
-        # 应用物品效果
+        # 按编号取出物品（1-based → 0-based）
+        item = player.inventory.pop(item_index - 1)
+
+        cfg = self.config.game
         effect = item.get("effect", "")
         value = item.get("value", 0)
 
@@ -1555,9 +1563,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if self._has_item(player, "o4"):
             hints.append("🔑 你持有层级钥匙！使用 /br exit 可以 100% 找到出口。")
         if self._has_item(player, "o1") and player.sanity < 50:
-            hints.append("🧠 理智值偏低，使用 /br use o1 可以恢复。")
+            hints.append("🧠 理智值偏低，使用 /br use <编号> 可以恢复，在背包中查看对应编号。")
         if self._has_item(player, "o2") and player.health < 50:
-            hints.append("❤️ 生命值偏低，使用 /br use o2 派得上用场。")
+            hints.append("❤️ 生命值偏低，使用 /br use <编号> 派得上用场。")
         if self._has_item(player, "o3"):
             hints.append("🔦 手电筒能驱散笑魇，+5% 出口发现率。")
 
@@ -1600,7 +1608,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             await self._send(stream_id, "❌ 无法识别你的身份，不能执行此操作。")
             return
 
-        # 首次关闭：设定管理员
+        # 未配置管理员：首个关闭者自动成为管理员
         if not self._admin_id:
             self._admin_id = user_id
             self._plugin_disabled = True
@@ -1608,7 +1616,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             await self._send(stream_id, "🔒 插件已关闭。现在只有你可以使用本插件。")
             return
 
-        # 已有管理员：验证身份
+        # 已配置管理员：验证身份
         if user_id != self._admin_id:
             await self._send(stream_id, "❌ 你不是管理员，无权关闭插件。")
             return
