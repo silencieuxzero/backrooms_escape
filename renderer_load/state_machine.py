@@ -19,6 +19,9 @@ class GameState(str, Enum):
     ALIVE = "ALIVE"
     """存活并处于 0-398 楼层。可进行探索、寻找出口、使用物品等所有操作。"""
 
+    DIALOG = "DIALOG"
+    """对话模式。正在与某角色交谈。仅允许对话结束事件。"""
+
     AT_399 = "AT_399"
     """已到达 Level 399（最终出口）。仅允许 ``exit`` 事件触发通关。"""
 
@@ -56,6 +59,12 @@ class GameEvent(str, Enum):
     USE_ITEM = "use_item"
     """使用物品（不改变 ALIVE 状态）。"""
 
+    ENTER_DIALOG = "enter_dialog"
+    """进入对话模式。"""
+
+    END_DIALOG = "end_dialog"
+    """结束对话模式，返回正常状态。"""
+
 
 # ── 转移表：{当前状态: {事件: 目标状态}} ──
 # 不在表中的 (状态, 事件) 组合视为非法操作。
@@ -69,6 +78,11 @@ _TRANSITIONS: dict[GameState, dict[GameEvent, GameState]] = {
         GameEvent.USE_ITEM: GameState.ALIVE,
         GameEvent.DIE: GameState.DEAD,
         GameEvent.REACH_399: GameState.AT_399,
+        GameEvent.ENTER_DIALOG: GameState.DIALOG,
+    },
+    GameState.DIALOG: {
+        GameEvent.END_DIALOG: GameState.ALIVE,
+        GameEvent.DIE: GameState.DEAD,
     },
     GameState.AT_399: {
         GameEvent.EXIT_399: GameState.ESCAPED,
@@ -130,6 +144,10 @@ class GameStateMachine:
     def is_playable(self) -> bool:
         """返回是否处于可进行游戏操作的状态（非 NOT_STARTED / DEAD / ESCAPED）。"""
         return self._state in (GameState.ALIVE, GameState.AT_399)
+
+    def is_dialog(self) -> bool:
+        """是否处于对话模式。"""
+        return self._state is GameState.DIALOG
 
     # ── 转移 ──
 

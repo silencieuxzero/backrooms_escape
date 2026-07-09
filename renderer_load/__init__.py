@@ -6,6 +6,14 @@
 
 from __future__ import annotations
 
+from .dialogue_manage import (
+    build_system_prompt,
+    build_message_list,
+    trim_history,
+    is_end_dialog,
+    MAX_HISTORY_ROUNDS,
+    END_DIALOG_KEYWORDS,
+)
 from .people_manage import CharacterEncounterService, EncounterResult, CHARACTERS
 from .shut import ShutManager
 from .state_machine import GameState, GameEvent, GameStateMachine
@@ -21,6 +29,12 @@ __all__ = [
     "CharacterEncounterService",
     "EncounterResult",
     "CHARACTERS",
+    "build_system_prompt",
+    "build_message_list",
+    "trim_history",
+    "is_end_dialog",
+    "MAX_HISTORY_ROUNDS",
+    "END_DIALOG_KEYWORDS",
     "ShutManager",
     "GameState",
     "GameEvent",

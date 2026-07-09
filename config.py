@@ -248,10 +248,10 @@ class GameConfig(PluginConfigBase):
     )
     item_weight_o4: int = Field(
         default=1,
-        description="层级钥匙获取权重",
+        description="楼层钥匙获取权重",
         json_schema_extra={
-            "label": "层级钥匙权重",
-            "hint": "发现补给品时获得层级钥匙的权重，权重越高越常见。",
+            "label": "楼层钥匙权重",
+            "hint": "发现补给品时获得楼层钥匙的权重，权重越高越常见。",
             "order": 15,
         },
     )

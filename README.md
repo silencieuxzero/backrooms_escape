@@ -66,16 +66,17 @@ output_mode = "text"      # 普通文本消息（兼容性更好）
 | `/br invite <角色名>` | 邀请好感度达标的角色同行 |
 | `/br dismiss` | 让同行角色返回基地 |
 | `/br gift <角色名> <编号>` | 赠送物品给角色提升好感度 |
+| `/br said <角色名>` | 与指定角色进行自由对话（LLM 驱动） |
 | `/br help` | 查看所有命令 |
 
 ## 游戏机制
 
 - **生命值**：初始 100，归零则死亡。通过急救包/能量棒恢复。
 - **理智值**：初始 100，探索消耗 2 点、找出口消耗 5 点。通过杏仁水/镇定剂恢复。归零额外扣血。
-- **出口概率**：基础 20%，每次失败 +10%。层级钥匙 100% 成功，手电筒/无线电各 +5%，同行角色额外 +5%。
+- **出口概率**：基础 20%，每次失败 +10%。楼层钥匙 100% 成功，手电筒/无线电各 +5%，同行角色额外 +5%。
 - **捷径**：12% 概率跳过 2~20 个楼层。
 - **知名楼层**：Level 0~11、Level 399 有专属描述和实体；其余楼层程序化生成。
-- **好感度系统**：在 Level 1 与安可欣/安继年互动可累计好感度，达到阈值后可邀请同行探索。同行角色提供出口率 +5% 加成，并触发专属互动台词。
+- **好感度系统**：在 Level 1 与安可欣/安继年/Luna/洛疏律互动，在 Level 2 与白宇互动，可累计好感度，达到阈值后可邀请同行探索。同行角色提供出口率 +5% 加成，并触发专属互动台词。使用 `/br said <角色名>` 可与已解锁的角色进行 LLM 驱动的自由对话。
 - **赠礼系统**：可将背包物品赠送给角色以提升好感度，不同物品增加的好感度可在配置文件中自定义。
 
 ## 物品
@@ -85,7 +86,7 @@ output_mode = "text"      # 普通文本消息（兼容性更好）
 | o1 | 杏仁水 | 恢复 30 理智 |
 | o2 | 急救包 | 恢复 30 生命，受伤时自动减伤 5 |
 | o3 | 手电筒 | 驱散笑魇和猎犬，其他实体减伤 10，+5% 出口率 |
-| o4 | 层级钥匙 | 100% 找到出口（稀有） |
+| o4 | 楼层钥匙 | 100% 找到出口（稀有） |
 | o5 | M.E.G.CN 无线电 | +5% 出口率 |
 | o6 | 能量棒 | 恢复 15 生命 |
 | o7 | 镇定剂 | 恢复 15 理智 |
@@ -96,7 +97,7 @@ output_mode = "text"      # 普通文本消息（兼容性更好）
 
 探索中可能遭遇实体并损失生命值。携带手电筒可减轻伤害，笑魇和猎犬会被完全驱散。
 
-笑魇(15)、猎犬(20)、窃皮者(25)、死亡飞蛾(10)、旅馆管理者(30)、深海之物(35)、以及其他层级专属实体。
+笑魇(15)、猎犬(20)、窃皮者(25)、死亡飞蛾(10)、旅馆管理者(30)、深海之物(35)、以及其他楼层专属实体。
 
 ## 配置
 
@@ -146,10 +147,10 @@ backrooms_escape/
 ├── renderer_load/             # 拓展功能模块目录（所有新 .py 文件放这里）
 │   ├── __init__.py            #   统一导出
 │   ├── shut.py                #   群聊静默管理器（ShutManager）
-│   ├── story_manage.py         #   故事/纸条/任务/工作/人物剧情管理器
-│   └── people_manage.py        #   角色系统（注册表 + 遭遇服务）
-│                              #   （StoryManager, PeopleStoryManager,
-│                              #    QuestManager, WorkManager, BaseWorkStoryManager）
+│   ├── state_machine.py       #   有限状态机（GameStateMachine）
+│   ├── story_manage.py        #   故事/任务/工作/人物剧情管理器
+│   ├── people_manage.py       #   角色系统（注册表 + 遭遇服务）
+│   └── dialogue_manage.py     #   对话系统（LLM prompt 构建器 + 对话历史管理）
 │
 ├── config.toml                # 插件配置文件（启动时自动读取）
 ├── _manifest.json             # 插件元信息（ID、版本、兼容性声明）
@@ -163,6 +164,9 @@ backrooms_escape/
 │   ├── people_story/          #   NPC 角色剧情 + 任务 + 人物关系数据
 │   │   ├── ankexin.txt
 │   │   ├── anjinian.txt
+│   │   ├── baiyu.txt
+│   │   ├── luna.txt
+│   │   ├── luo_shulv.txt
 │   │   ├── people_quests.json
 │   │   └── people_relationship.json
 │   └── base_story/            #   基地工作解谜 + 解锁故事文本
@@ -188,8 +192,8 @@ plugin.py
               ├── state_machine.py  #   GameStateMachine
               ├── shut.py           #   ShutManager
               ├── story_manage.py  #   StoryManager 等
-              └── people_manage.py #   CharacterEncounterService
-                                     #   QuestManager, WorkManager, BaseWorkStoryManager
+              ├── people_manage.py #   CharacterEncounterService
+              └── dialogue_manage.py #   对话系统
 ```
 
 > 所有新增的功能拓展模块应放置在 `renderer_load/` 目录下，并在 `renderer.py` 中导入并透出。`plugin.py` 无需直接引用 `renderer_load/` 下的任何模块。
@@ -205,6 +209,7 @@ plugin.py
 | `NOT_STARTED` | 未开始游戏 | `/br start` |
 | `ALIVE` | 存活探索中（Level 0~398） | 全部命令 |
 | `AT_399` | 到达最终出口 | `/br exit`（触发通关） |
+| `DIALOG` | 对话模式 | `/br said`（选择选项或输入文本） |
 | `DEAD` | 生命值归零 | `/br start` 重新开始 |
 | `ESCAPED` | 成功逃出后室 | `/br start` 重新开始 |
 
@@ -212,7 +217,9 @@ plugin.py
 
 ```
 NOT_STARTED ──start──▶ ALIVE ──reach_399──▶ AT_399 ──exit_399──▶ ESCAPED
-                         │                                              │
+                         │  │                                           │
+                         │  ├──enter_dialog──▶ DIALOG ──end_dialog──▶   │
+                         │  │                                           │
                          │ die                                           │ restart
                          ▼                                              │
                        DEAD ◀────────────────────────────────────────────┘

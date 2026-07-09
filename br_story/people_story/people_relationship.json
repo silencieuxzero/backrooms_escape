@@ -3,7 +3,8 @@
     "name": "安可欣",
     "identity": "M.E.G.CN 信息分析组探员",
     "age": 22,
-    "relationship": "安继年（龙凤胎弟弟）",
+    "personality": "温和可靠，善解人意",
+    "relationship": "安继年（龙凤胎弟弟）、白宇（前同事）",
     "status": "活跃",
     "first_encounter": "Level 1 — Alpha 基地休息区",
     "description": "安可欣是你在 Alpha 基地遇到的第一个 M.E.G.CN 成员。她温和而可靠，会主动帮助新来的切入者适应后室环境。她的笔记本上记录着许多楼层的见闻与故事。她和弟弟安继年先后切入后室，在 Alpha 基地重逢。"
@@ -12,9 +13,40 @@
     "name": "安继年",
     "identity": "M.E.G.CN 工程部技师",
     "age": 22,
+    "personality": "热情开朗，乐观务实",
     "relationship": "安可欣（龙凤胎姐姐）",
     "status": "活跃",
     "first_encounter": "Level 1 — Alpha 基地维修区",
     "description": "安继年是 Alpha 基地的资深工程师，负责维护基地及其前哨站的供电与通讯设备。热情开朗，他随身携带一把从现实世界带进来的旧扳手。"
+  },
+  "baiyu": {
+    "name": "白宇",
+    "identity": "独立流浪者 · 前 M.E.G.CN 外勤勘探员",
+    "age": 28,
+    "personality": "沉默寡言，沉稳独立",
+    "relationship": "安可欣（前同事）、Luna（偶尔合作）",
+    "status": "活跃",
+    "first_encounter": "Level 2 — 管道迷宫",
+    "description": "白宇曾是 M.E.G.CN 外勤勘探队的核心成员，在一次深入 Level 11 的探索任务中与队伍失散，独自在后室深处流浪了数月之久。沉默寡言，行动力极强，对深层层楼的了解不亚于任何 M.E.G.CN 情报官。虽然习惯独来独往，但偶尔会回 Alpha 基地补给，与安可欣保持着联系。"
+  },
+  "luna": {
+    "name": "Luna",
+    "identity": "后室现象独立研究员（曾在意大利留学）",
+    "age": 26,
+    "personality": "冷静理性，求知好奇",
+    "relationship": "安可欣（信息共享伙伴）、白宇（偶尔合作）",
+    "status": "活跃",
+    "first_encounter": "Level 1 — Alpha 基地通讯室",
+    "description": "Luna 中文名陆遥，曾在意大利深造物理学与信号分析，归国后不久意外切入了后室。她以独立研究员的身份在后室中穿梭，精通信号分析、空间异常测量和环境频率研究，试图用科学的方式解构后室的运作规律。性格冷静理性又不失热忱，与 M.E.G.CN 保持着非正式的合作关系，在 Alpha 基地拥有一个临时工作站。"
+  },
+  "luo_shulv": {
+    "name": "洛疏律",
+    "identity": "M.E.G.CN 信息系统管理员",
+    "age": 24,
+    "personality": "务实严谨，冷静专注",
+    "relationship": "安可欣（同事）、安继年（同事）",
+    "status": "活跃",
+    "first_encounter": "Level 1 — Alpha 基地数据中心",
+    "description": "洛疏律是 Alpha 基地的信息系统管理员，负责维护 M.E.G.CN 所有的数据库、通讯系统和档案记录。切入后室之前他曾是一名网络安全架构师，凭借扎实的技术功底让基地里那些落后二十年的设备维持着最基本的运转。性格务实、有条理，虽然偶尔会抱怨设备老旧，但从不耽误工作。"
   }
 }

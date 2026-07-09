@@ -19,6 +19,12 @@ from .renderer_load import (
     CharacterEncounterService,
     EncounterResult,
     CHARACTERS,
+    build_system_prompt,
+    build_message_list,
+    trim_history,
+    is_end_dialog,
+    MAX_HISTORY_ROUNDS,
+    END_DIALOG_KEYWORDS,
     ShutManager,
     GameState,
     GameEvent,
@@ -36,6 +42,12 @@ __all__ = [
     "CharacterEncounterService",
     "EncounterResult",
     "CHARACTERS",
+    "build_system_prompt",
+    "build_message_list",
+    "trim_history",
+    "is_end_dialog",
+    "MAX_HISTORY_ROUNDS",
+    "END_DIALOG_KEYWORDS",
     "ShutManager",
     "GameState",
     "GameEvent",
@@ -146,7 +158,7 @@ class BackroomsRenderer:
     def exit_search_hint(exit_attempts: int) -> str:
         """根据出口搜索次数生成引导。"""
         if exit_attempts >= 2:
-            return "\n💡 找了多次都没找到出口？试试 /br explore 探索一下，也许能找到层级钥匙或其他帮助。"
+            return "\n💡 找了多次都没找到出口？试试 /br explore 探索一下，也许能找到楼层钥匙或其他帮助。"
         return "\n💡 继续 /br exit 再试试，每次失败都会提高后面的成功率！"
 
     # ---------- 完整消息 ----------
@@ -181,49 +193,6 @@ class BackroomsRenderer:
             "祝你好运，探员。"
         )
 
-    def render_start_nodes(self, ctx: RenderContext) -> list[str]:
-        """游戏开始消息，拆分为多个转发节点。"""
-        info = ctx.level_info
-        return [
-            # 节点 1：标题 + 楼层信息
-            (
-                "══════════════════════════\n"
-                "  🏢 后 室 逃 生 🏃\n"
-                "══════════════════════════\n\n"
-                f"{info['title']}\n"
-                f"危险等级：{info['danger']}\n\n"
-                f"{info['description']}"
-            ),
-            # 节点 2：角色背景
-            (
-                "你是 M.E.G.CN（探险者总署中文分部）的探员。\n"
-                "你被困在了一个叫做「后室」的异次元空间之中。\n"
-                "这里没有日夜，没有出口的尽头。\n"
-                "但你有经验、有装备、有信念。\n\n"
-                "你的任务只有一个——\n"
-                "找到通往 Level 399 的最终出口，回到现实世界。"
-            ),
-            # 节点 3：命令列表
-            (
-                "📋 可用命令：\n\n"
-                "  /br story     — 故事档案（查看已解锁的工作故事）\n"
-                "  /br test      — 插件连通性测试\n"
-                "  /br explore   — 探索当前楼层\n"
-                "  /br exit      — 尝试寻找出口\n"
-                "  /br read      — 阅读纸条\n"
-                "  /br use <编号> — 使用背包中对应编号的物品\n"
-                "  /br status    — 查看当前状态\n"
-                "  /br inventory — 查看背包\n"
-                "  /br invite <名> — 邀请好感度达标的角色一起探索\n"
-                "  /br dismiss    — 让同行的角色返回基地\n"
-                "  /br gift <名> <编号> — 赠送背包物品给角色（提升好感度）\n"
-                "  /br quest     — 查看任务面板\n"
-                "  /br work      — Alpha 基地工作（解谜）\n"
-                "  /br help      — 游戏帮助\n\n"
-                "祝你好运，探员。"
-            ),
-        ]
-
     def render_use_item(
         self, item: dict, ctx: RenderContext, remaining_items: list[str],
         old_health: int = 0, old_sanity: int = 0,
@@ -248,7 +217,7 @@ class BackroomsRenderer:
         elif effect == "hint":
             lines.append("📻 M.E.G.CN 无线电已启用，将帮助你在楼层中导航（+5% 出口发现率）。")
         elif effect == "exit_guarantee":
-            lines.append("🔑 层级钥匙已使用！下次 /br exit 必能找到出口。")
+            lines.append("🔑 楼层钥匙已使用！下次 /br exit 必能找到出口。")
         else:
             lines.append("这个物品似乎没有明显的效果……但也许在关键时刻会派上用场。")
 
@@ -324,18 +293,19 @@ class BackroomsRenderer:
         # 角色遭遇
         if char_encounter:
             char_id, story_text, char_gift, quest_offer, fav_inc, fav_current = char_encounter
-            if char_id == "ankexin":
-                lines.append("\n═════ 你在 Alpha 基地遇到了安可欣 ═════")
-                lines.append("")
-                lines.append(story_text)
-                lines.append("")
-                lines.append("═══════════════════════════════════")
-            elif char_id == "anjinian":
-                lines.append("\n═════ 你在维修区遇到了安继年 ═════")
-                lines.append("")
-                lines.append(story_text)
-                lines.append("")
-                lines.append("═══════════════════════════════════")
+            char_info = CHARACTERS.get(char_id, {})
+            char_name = char_info.get("name", char_id)
+            encounter_level = char_info.get("level", 1)
+            level_name = f"Level {encounter_level}"
+            if encounter_level == 1:
+                level_name += "（Alpha 基地）"
+            elif encounter_level == 2:
+                level_name += "（管道迷宫）"
+            lines.append(f"\n═════ 你在 {level_name} 遇到了 {char_name} ═════")
+            lines.append("")
+            lines.append(story_text)
+            lines.append("")
+            lines.append("═══════════════════════════════════")
             if char_gift:
                 lines.append(char_gift)
             if quest_offer:
@@ -376,7 +346,7 @@ class BackroomsRenderer:
 
         # 同伴同行提示
         if companion:
-            char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(companion, companion)
+            char_name = CHARACTERS.get(companion, {}).get("name", companion)
             companion_lines = {
                 "ankexin": [
                     f"\n💬 {char_name} 跟在你身边，警惕地观察着四周。",
@@ -389,6 +359,24 @@ class BackroomsRenderer:
                     f"\n💬 「这条通道的结构很稳固。」{char_name}检查着墙壁说道。",
                     f"\n💬 {char_name} 掏出一个小工具摆弄着。「说不定能用上。」",
                     f"\n💬 「嘿，前面好像有动静。」{char_name}压低声音说。",
+                ],
+                "baiyu": [
+                    f"\n💬 {char_name} 沉默地走在前面，时不时停下来确认方向。",
+                    f"\n💬 {char_name} 蹲下检查地面痕迹。「有人不久前经过这里。」",
+                    f"\n💬 「保持安静。」{char_name}低声说，眼神扫过前方的阴影。",
+                    f"\n💬 {char_name} 从背包里掏出一根能量棒递给你。「拿着。」",
+                ],
+                "luna": [
+                    f"\n💬 {char_name} 拿出一个奇怪的小仪器，盯着上面的读数。",
+                    f"\n💬 「这里的频率有点异常。」{char_name}若有所思地说。",
+                    f"\n💬 {char_name} 在笔记本上飞快地记录着什么。",
+                    f"\n💬 「你有没有感觉到……这层的空气不太一样？」{char_name}问。",
+                ],
+                "luo_shulv": [
+                    f"\n💬 {char_name} 推了推眼镜，打量着周围的线路布局。",
+                    f"\n💬 「这里的管线排布很不合理。」{char_name}皱着眉头说。",
+                    f"\n💬 {char_name} 拿出万用表测试了一下墙壁上的接口。「还有电。」",
+                    f"\n💬 {char_name} 一边走一边在便携终端上记录数据。",
                 ],
             }
             c_lines = companion_lines.get(companion)
@@ -422,10 +410,13 @@ class BackroomsRenderer:
 
         # 同伴互动
         if companion:
-            char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(companion, companion)
+            char_name = CHARACTERS.get(companion, {}).get("name", companion)
             companion_exit_lines = {
                 "ankexin": f"\n💬 {char_name} 兴奋地说：「就是这里！我们走！」",
                 "anjinian": f"\n💬 「找到了！」{char_name} 咧嘴一笑，「好样的，搭档！」",
+                "baiyu": f"\n💬 {char_name} 点了点头，难得露出一丝放松的表情。",
+                "luna": f"\n💬 「数据吻合。」{char_name} 合上仪器，「出口确实在这里。」",
+                "luo_shulv": f"\n💬 {char_name} 推了推眼镜。「信号确认，前方是安全的出口。」",
             }
             lines.append(companion_exit_lines.get(companion, ""))
 
@@ -510,13 +501,13 @@ class BackroomsRenderer:
         if favorability:
             lines.append("\n💝 角色好感度：")
             for char_id, fav in sorted(favorability.items()):
-                char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(char_id, char_id)
+                char_name = CHARACTERS.get(char_id, {}).get("name", char_id)
                 heart = "❤️" * min(5, fav // 20) + "🤍" * (5 - min(5, fav // 20))
                 lines.append(f"  {char_name}：{fav}  {heart}")
 
         # 同伴信息
         if companion:
-            char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(companion, companion)
+            char_name = CHARACTERS.get(companion, {}).get("name", companion)
             lines.append(f"\n👥 同行：{char_name}（出口率 +5%）")
             lines.append(f"  使用 /br dismiss 可以让她/他返回基地。")
 
@@ -571,7 +562,7 @@ class BackroomsRenderer:
             "  · 部分楼层有捷径，可以跳过多个楼层\n"
             "  · 知名楼层（Level 0-11 等）有独特描述和特殊实体\n"
             "  · 黑暗楼层中手电筒能驱散笑魇\n"
-            "  · 层级钥匙能确保一定找到出口\n\n"
+            "  · 楼层钥匙能确保一定找到出口\n\n"
             "祝你好运，M.E.G.CN 探员！后室等着你去征服。"
         )
 
@@ -655,7 +646,7 @@ class BackroomsRenderer:
         """通关消息。"""
         companion_text = ""
         if companion:
-            char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(companion, companion)
+            char_name = CHARACTERS.get(companion, {}).get("name", companion)
             companion_text = (
                 f"\n{char_name} 跟在你身后一起穿过了那扇门。\n"
                 f"在阳光下，你们相视一笑——终于回来了。\n\n"
@@ -679,6 +670,84 @@ class BackroomsRenderer:
         return (
             "\n💀 你的生命值降到了 0。你永远留在了后室之中……\n"
             "使用 /br start 重新开始吧。"
+        )
+
+    # ==================== 合并转发三段式组件 ====================
+
+    @staticmethod
+    def render_status_panel(
+        ctx: RenderContext,
+        currency: int = 0,
+        companion: str | None = None,
+        favorability: dict[str, int] | None = None,
+    ) -> str:
+        """人物状态面板（合并转发第二段）。"""
+        h_label = BackroomsRenderer.health_label(ctx.health, ctx.initial_health)
+        s_label = BackroomsRenderer.sanity_label(ctx.sanity, ctx.initial_sanity)
+        progress = min(100, int(ctx.current_level / 399 * 100))
+        bar = "█" * (progress // 5) + "░" * (20 - progress // 5)
+
+        lines = [
+            "📊 探 员 状 态",
+            "",
+            f"📍 {ctx.level_info['title']}  |  危险等级：{ctx.level_info['danger']}",
+            "",
+            f"❤️ 生命：{ctx.health}/{ctx.initial_health}  [{h_label}]",
+            f"🧠 理智：{ctx.sanity}/{ctx.initial_sanity}  [{s_label}]",
+            f"📦 物品：{ctx.inventory_count}件",
+        ]
+        if currency > 0:
+            lines.append(f"💰 贡献点：{currency}")
+
+        if companion:
+            lines.append(f"👥 同行：{companion}（出口率 +5%）")
+
+        if favorability:
+            lines.append("")
+            for char_id, fav in sorted(favorability.items()):
+                cname = {"ankexin":"安可欣","anjinian":"安继年","baiyu":"白宇","luna":"Luna","luo_shulv":"洛疏律"}.get(char_id, char_id)
+                heart = "❤️" * min(5, fav // 20) + "🤍" * (5 - min(5, fav // 20))
+                lines.append(f"  {cname}：{fav}  {heart}")
+
+        lines += [
+            "",
+            f"🏁 进度：{progress}%  [{bar}]",
+            f"🔢 本层尝试：{ctx.exit_attempts} 次",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
+    def render_commands_panel(is_at_399: bool = False, is_dialog: bool = False) -> str:
+        """可用命令面板（合并转发第三段）。"""
+        if is_at_399:
+            return (
+                "📋 可用命令：\n\n"
+                "  /br exit     — 推开最终之门，逃出后室\n"
+                "  /br status   — 查看当前状态\n"
+                "  /br help     — 游戏帮助"
+            )
+        if is_dialog:
+            return (
+                "💬 对话模式\n\n"
+                "  自由输入想说的话与角色交流\n"
+                '  输入「0」或「结束对话」结束对话\n'
+                "  /br status   — 查看当前状态"
+            )
+        return (
+            "📋 可用命令：\n\n"
+            "  /br explore    — 探索当前楼层\n"
+            "  /br exit      — 尝试寻找出口\n"
+            "  /br use <编号> — 使用物品\n"
+            "  /br inventory  — 查看背包\n"
+            "  /br status    — 查看状态\n"
+            "  /br read      — 阅读纸条\n"
+            "  /br said <名>  — 与角色对话\n"
+            "  /br invite <名> — 邀请角色同行\n"
+            "  /br dismiss    — 解散同行\n"
+            "  /br gift <名> <编号> — 赠送礼物\n"
+            "  /br quest     — 任务系统\n"
+            "  /br work      — 基地工作\n"
+            "  /br help      — 游戏帮助"
         )
 
     def render_not_started(self) -> str:

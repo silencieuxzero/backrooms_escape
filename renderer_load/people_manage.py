@@ -23,11 +23,31 @@ CHARACTERS: dict[str, dict[str, Any]] = {
         "name": "安可欣",
         "gift_item_ids": ["o1", "o1"],       # 2 瓶杏仁水
         "can_offer_quest": True,
+        "level": 1,                          # 在 Level 1 出现
     },
     "anjinian": {
         "name": "安继年",
         "gift_item_ids": ["o1", "o1"],       # 2 瓶杏仁水
         "can_offer_quest": False,
+        "level": 1,                          # 在 Level 1 出现
+    },
+    "baiyu": {
+        "name": "白宇",
+        "gift_item_ids": ["o3"],             # 1 个手电筒
+        "can_offer_quest": False,
+        "level": 2,                          # 在 Level 2 出现
+    },
+    "luna": {
+        "name": "Luna",
+        "gift_item_ids": ["o7"],             # 1 支镇定剂
+        "can_offer_quest": False,
+        "level": 1,                          # 在 Level 1 出现
+    },
+    "luo_shulv": {
+        "name": "洛疏律",
+        "gift_item_ids": ["o6"],             # 1 根能量棒
+        "can_offer_quest": False,
+        "level": 1,                          # 在 Level 1 出现
     },
 }
 
@@ -106,14 +126,11 @@ class CharacterEncounterService:
         Returns:
             遭遇结果；未触发时返回 ``None``。
         """
-        # 仅在 Level 1（Alpha 基地）可遇到角色
-        if level != 1:
-            return None
-
-        # 筛选有初见剧情的可遇角色
+        # 筛选在当前楼层有初见剧情的可遇角色
         available = [
-            cid for cid in CHARACTERS
-            if people_story_manager.get_first_story(cid) is not None
+            cid for cid, meta in CHARACTERS.items()
+            if meta.get("level") == level
+            and people_story_manager.get_first_story(cid) is not None
         ]
         if not available:
             return None

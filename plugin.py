@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 import re
@@ -25,6 +26,12 @@ from .renderer import (
     GameStateMachine,
     CHARACTERS,
     CharacterEncounterService,
+    build_system_prompt,
+    build_message_list,
+    trim_history,
+    is_end_dialog,
+    MAX_HISTORY_ROUNDS,
+    END_DIALOG_KEYWORDS,
     StoryManager,
     PeopleStoryManager,
     QuestManager,
@@ -217,7 +224,7 @@ ICONIC_LEVELS: dict[int, dict[str, Any]] = {
         "title": "Level 11 — 「The Endless City / 无尽城市」",
         "description": (
             "Level 11 是一座无限蔓延的现代化城市。高楼大厦林立，\n"
-            "街道整洁有序，但空无一人。这里是一个相对安全的层级，\n"
+            "街道整洁有序，但空无一人。这里是一个相对安全的楼层，\n"
             "M.E.G.CN 在此设有多个前哨站。但你仍然需要保持警惕。"
         ),
         "danger": "低",
@@ -264,9 +271,9 @@ EXPLORE_EVENTS = [
 # 捷径楼层
 SHORTCUT_POOL = [
     {"levels_skip": (5, 15), "description": "你发现了一部还能运转的电梯，它带你穿过了多个楼层！"},
-    {"levels_skip": (3, 10), "description": "地板突然裂开，你跌入了一个滑道，加速滑过了数个层级……"},
+    {"levels_skip": (3, 10), "description": "地板突然裂开，你跌入了一个滑道，加速滑过了数个楼层……"},
     {"levels_skip": (2, 8), "description": "你找到了一扇标注着「快速通道」的防火门，M.E.G.CN 真该多建几个这样的东西。"},
-    {"levels_skip": (8, 20), "description": "一个神秘的传送门悬浮在半空中，你鼓起勇气走了进去——出来时已经跨越了多个层级。"},
+    {"levels_skip": (8, 20), "description": "一个神秘的传送门悬浮在半空中，你鼓起勇气走了进去——出来时已经跨越了多个楼层。"},
 ]
 
 
@@ -304,7 +311,7 @@ class PlayerState:
     sanity: int = 100
     inventory: list[dict] = field(default_factory=list)
     fsm: GameStateMachine = field(default_factory=GameStateMachine)
-    exit_attempts: int = 0  # 当前层级尝试找出口的次数
+    exit_attempts: int = 0  # 当前楼层尝试找出口的次数
     pending_note: str | None = None  # 待阅读的纸条内容
     unlocked_chars: set[str] = field(default_factory=set)  # 已解锁的角色 ID 集合
     currency: int = 0  # M.E.G.CN 内部贡献点
@@ -317,6 +324,9 @@ class PlayerState:
     l1_explore_count: int = 0  # Level 1 中已探索次数（达到阈值触发日常任务）
     favorability: dict[str, int] = field(default_factory=dict)  # 角色好感度 {char_id: 数值}
     companion: str | None = None  # 当前同行的角色 ID，None 表示无同伴
+    dialog_char_id: str | None = None  # 对话模式中的角色 ID，None 表示非对话模式
+    dialog_node_id: str = "start"  # 当前对话树节点 ID
+    dialog_history: list[dict[str, str]] = field(default_factory=list)  # 对话历史 [{role, content}]
 
 
 # ==================== 插件主体 ====================
@@ -335,6 +345,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._work_manager = WorkManager()
         self._work_story_manager = BaseWorkStoryManager()
         self._char_encounter_service = CharacterEncounterService(ITEMS_POOL)
+        self._people_relationship_data = self._load_people_net()
         self._renderer = BackroomsRenderer()
         self._plugin_disabled: bool = False
         self._admin_ids: set[str] = set()
@@ -772,6 +783,28 @@ class BackroomsGamePlugin(MaiBotPlugin):
             await self._do_gift(stream_id, char_name, item_index)
         return True, "赠礼处理完成", 1
 
+    # ==================== 对话模式 ====================
+
+    @Command(
+        "br_said",
+        description="对话 — 与指定角色进入对话模式",
+        pattern=r"^/br\s+said\s+(\S+)",
+    )
+    async def handle_said(self, **kwargs: Any):
+        """与指定角色进入对话模式。"""
+        stream_id = kwargs.get("stream_id", "")
+        message = kwargs.get("message", {})
+        raw_text = str(
+            message.get("raw_message")
+            or message.get("text")
+            or message.get("message")
+            or ""
+        )
+        m = re.search(r"/br\s+said\s+(\S+)", raw_text)
+        if m:
+            await self._do_said(stream_id, m.group(1).strip())
+        return True, "对话模式处理完成", 1
+
     # ==================== 访问控制拦截 ====================
 
     @staticmethod
@@ -1038,6 +1071,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         被静默的群组中，只有 /br 命令可以继续处理，
         其余消息全部终止在本 hook，不进入 Planner/LLM 处理链。
+        同时检测对话模式下的非命令消息，作为对话选项处理。
         """
         message = kwargs.get("message", {})
         if not message:
@@ -1056,6 +1090,16 @@ class BackroomsGamePlugin(MaiBotPlugin):
             return {"action": "continue"}
 
         chat_type, chat_id = resolved
+
+        # 检查玩家是否处于对话模式
+        user_id = str(stream_id)
+        player = self._players.get(user_id)
+        if player and player.fsm.is_dialog():
+            # 将非 /br 消息作为对话选项处理
+            self.ctx.logger.debug("对话模式: 处理玩家 %s 的消息: %s", user_id, raw_text)
+            asyncio.ensure_future(self._do_dialog_choice(stream_id, raw_text.strip()))
+            return {"action": "abort"}
+
         if chat_type != "group":
             return {"action": "continue"}
 
@@ -1100,6 +1144,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
             "l1_explore_count": player.l1_explore_count,
             "favorability": player.favorability,
             "companion": player.companion,
+            "dialog_char_id": player.dialog_char_id,
+            "dialog_node_id": player.dialog_node_id,
+            "dialog_history": player.dialog_history,
         }
         filepath = self._player_file_path(user_id)
         try:
@@ -1141,6 +1188,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
             l1_explore_count=data.get("l1_explore_count", 0),
             favorability=data.get("favorability", {}),
             companion=data.get("companion"),
+            dialog_char_id=data.get("dialog_char_id"),
+            dialog_node_id=data.get("dialog_node_id", "start"),
+            dialog_history=data.get("dialog_history", []),
         )
 
     def _delete_player_save(self, user_id: str) -> None:
@@ -1256,6 +1306,50 @@ class BackroomsGamePlugin(MaiBotPlugin):
             return await self.ctx.send.text(combined, stream_id)
         return await self.ctx.send.text(text, stream_id)
 
+    async def _send_game_event(
+        self, stream_id: str, event_text: str, player: PlayerState,
+    ) -> bool:
+        """发送三段式游戏事件消息（合并转发模式）。
+
+        将消息拆分为三段：
+          1. 当前事件 — 游戏核心事件描述
+          2. 人物状态 — 生命/理智/物品/进度等
+          3. 可用命令 — 根据当前状态显示不同命令列表
+
+        Args:
+            stream_id: 消息会话 ID。
+            event_text: 核心事件文本。
+            player: 玩家状态对象。
+        """
+        ctx = self._make_ctx(player)
+        companion_name = None
+        if player.companion:
+            companion_name = CHARACTERS.get(player.companion, {}).get("name", player.companion)
+
+        status_text = self._renderer.render_status_panel(
+            ctx,
+            currency=player.currency,
+            companion=companion_name,
+            favorability=player.favorability if player.favorability else None,
+        )
+        commands_text = self._renderer.render_commands_panel(
+            is_at_399=player.fsm.is_at_399(),
+            is_dialog=player.fsm.is_dialog(),
+        )
+
+        nodes = [
+            self._forward_node("M.E.G.CN-操作终端", "M.E.G.CN 系统", event_text),
+            self._forward_node("M.E.G.CN-状态面板", "M.E.G.CN 终端", status_text),
+            self._forward_node("M.E.G.CN-指令面板", "M.E.G.CN 指令", commands_text),
+        ]
+
+        mode = self.config.plugin.output_mode
+        if mode == "forward":
+            return await self.ctx.send.forward(nodes, stream_id)
+        # text 模式：三段拼接为一条消息
+        combined = f"{event_text}\n\n{status_text}\n\n{commands_text}"
+        return await self.ctx.send.text(combined, stream_id)
+
     def _get_level_info(self, level: int) -> dict[str, Any]:
         """获取楼层信息。"""
         if level in ICONIC_LEVELS:
@@ -1281,7 +1375,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             "name": f"未知区域-{level}",
             "title": f"Level {level}",
             "description": (
-                f"你来到了 Level {level}。这是一个未被充分记录的后室层级。\n"
+                f"你来到了 Level {level}。这是一个未被充分记录的后室楼层。\n"
                 f"这里的主要特征是{theme}。\n"
                 f"危险等级：{danger}。保持警惕，继续前进。"
             ),
@@ -1404,11 +1498,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._save_player(user_id)
 
         ctx = self._make_ctx(player)
-        nodes = [
-            self._forward_node("M.E.G.CN-指挥中心", "M.E.G.CN 指挥部", text)
-            for text in self._renderer.render_start_nodes(ctx)
-        ]
-        await self._send(stream_id, "", nodes=nodes)
+        event_text = self._renderer.render_start(ctx)
+        await self._send_game_event(stream_id, event_text, player)
 
     async def _do_use_item(self, stream_id: str, item_index: int) -> None:
         """使用背包物品（按编号）。"""
@@ -1444,10 +1535,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
         ctx = self._make_ctx(player)
         remaining = [i.get("display_name", i["name"]) for i in player.inventory]
 
-        await self._send(
-            stream_id,
-            self._renderer.render_use_item(item, ctx, remaining, old_health, old_sanity),
-        )
+        event_text = self._renderer.render_use_item(item, ctx, remaining, old_health, old_sanity)
+        await self._send_game_event(stream_id, event_text, player)
         self._save_player(user_id)
 
     async def _do_explore(self, stream_id: str) -> None:
@@ -1566,17 +1655,21 @@ class BackroomsGamePlugin(MaiBotPlugin):
             del self._players[user_id]
             self._delete_player_save(user_id)
             ctx = self._make_ctx(player)
-            await self._send(
-                stream_id,
-                self._renderer.render_explore(ctx, event_text, crate_result, health_cost, note_found, entity_encounter, char_encounter, work_triggered, work_assigned, companion=player.companion),
+            event_text = self._renderer.render_explore(
+                ctx, event_text, crate_result, health_cost,
+                note_found, entity_encounter, char_encounter,
+                work_triggered, work_assigned, companion=player.companion,
             )
+            await self._send_game_event(stream_id, event_text, player)
             return
 
         ctx = self._make_ctx(player)
-        await self._send(
-            stream_id,
-            self._renderer.render_explore(ctx, event_text, crate_result, health_cost, note_found, entity_encounter, char_encounter, work_triggered, work_assigned, companion=player.companion),
+        event_text = self._renderer.render_explore(
+            ctx, event_text, crate_result, health_cost,
+            note_found, entity_encounter, char_encounter,
+            work_triggered, work_assigned, companion=player.companion,
         )
+        await self._send_game_event(stream_id, event_text, player)
         self._save_player(user_id)
 
     async def _do_exit(self, stream_id: str) -> None:
@@ -1657,10 +1750,10 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
             new_level_info = self._get_level_info(player.current_level)
             ctx = self._make_ctx(player)
-            await self._send(
-                stream_id,
-                self._renderer.render_exit_found(old_level_info, ctx, new_level_info, shortcut_desc, from_level, player.companion),
+            event_text = self._renderer.render_exit_found(
+                old_level_info, ctx, new_level_info, shortcut_desc, from_level, player.companion,
             )
+            await self._send_game_event(stream_id, event_text, player)
 
             # 检测任务进度：到达目标楼层
             for qid in list(player.active_quests):
@@ -1706,23 +1799,19 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 del self._players[user_id]
                 self._delete_player_save(user_id)
                 ctx = self._make_ctx(player)
-                await self._send(
-                    stream_id,
-                    self._renderer.render_exit_not_found(
-                        ctx, player.exit_attempts, event_text,
-                        ex_crate_result, ex_health_cost, ex_note_found,
-                    ),
+                event_text = self._renderer.render_exit_not_found(
+                    ctx, player.exit_attempts, event_text,
+                    ex_crate_result, ex_health_cost, ex_note_found,
                 )
+                await self._send_game_event(stream_id, event_text, player)
                 return
 
             ctx = self._make_ctx(player)
-            await self._send(
-                stream_id,
-                self._renderer.render_exit_not_found(
-                    ctx, player.exit_attempts, event_text,
-                    ex_crate_result, ex_health_cost, ex_note_found,
-                ),
+            event_text = self._renderer.render_exit_not_found(
+                ctx, player.exit_attempts, event_text,
+                ex_crate_result, ex_health_cost, ex_note_found,
             )
+            await self._send_game_event(stream_id, event_text, player)
 
         self._save_player(user_id)
 
@@ -1753,7 +1842,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         hints = []
         if self._has_item(player, "o4"):
-            hints.append("🔑 你持有层级钥匙！使用 /br exit 可以 100% 找到出口。")
+            hints.append("🔑 你持有楼层钥匙！使用 /br exit 可以 100% 找到出口。")
         if self._has_item(player, "o1") and player.sanity < 50:
             hints.append("🧠 理智值偏低，使用 /br use <编号> 可以恢复。")
         if self._has_item(player, "o2") and player.health < 50:
@@ -2025,7 +2114,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         elif char_name in name_to_id:
             char_id = name_to_id[char_name]
         else:
-            await self._send(stream_id, f"❌ 不认识「{char_name}」，可邀请的角色：安可欣、安继年")
+            await self._send(stream_id, f"❌ 不认识「{char_name}」，可邀请的角色：安可欣、安继年、白宇、Luna、洛疏律")
             return
 
         char_meta = CHARACTERS.get(char_id)
@@ -2034,16 +2123,17 @@ class BackroomsGamePlugin(MaiBotPlugin):
             return
 
         if char_id not in player.unlocked_chars:
-            await self._send(stream_id, f"❌ 你还没有在 Alpha 基地遇到过 {char_meta['name']}，先去 Level 1 探索吧。")
+            await self._send(stream_id, f"❌ 你还没有遇到过 {char_meta['name']}，先去对应楼层探索吧。")
             return
 
         current_fav = player.favorability.get(char_id, 0)
         threshold = self.config.game.favorability_threshold
         if current_fav < threshold:
+            char_level = char_meta.get("level", 1)
             await self._send(
                 stream_id,
                 f"❌ 与 {char_meta['name']} 的好感度还不够（当前 {current_fav}/{threshold}）。\n"
-                f"多去 Level 1 的 Alpha 基地遇到她/他，提升好感度吧。",
+                f"多去 Level {char_level} 遇到她/他，提升好感度吧。",
             )
             return
 
@@ -2082,6 +2172,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
             return
 
         char_name = CHARACTERS.get(player.companion, {}).get("name", player.companion)
+        char_meta_dismiss = CHARACTERS.get(player.companion, {})
+        char_level = char_meta_dismiss.get("level", 1)
         player.companion = None
         self._save_player(user_id)
         await self._send(
@@ -2090,9 +2182,148 @@ class BackroomsGamePlugin(MaiBotPlugin):
             f"  👋 告别\n"
             f"══════════════════════\n\n"
             f"你送 {char_name} 回到了 Alpha 基地。\n"
-            f"「下次需要我的时候，随时来 Level 1 找我。」\n\n"
+            f"「下次需要我的时候，随时来 Level {char_level} 找我。」\n\n"
             f"{char_name} 挥了挥手，转身消失在走廊尽头。",
         )
+
+    # ── 对话模式（LLM 驱动）──
+
+    async def _do_said(self, stream_id: str, char_input: str) -> None:
+        """与指定角色进入 LLM 驱动的自由对话模式。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.fsm.is_alive():
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        # 将中文名映射为角色 ID
+        name_to_id = {meta["name"]: cid for cid, meta in CHARACTERS.items()}
+        if char_input in CHARACTERS:
+            char_id = char_input
+        elif char_input in name_to_id:
+            char_id = name_to_id[char_input]
+        else:
+            await self._send(stream_id, f"❌ 不认识「{char_input}」，可对话的角色：安可欣、安继年、白宇、Luna、洛疏律")
+            return
+
+        char_meta = CHARACTERS.get(char_id)
+        if not char_meta:
+            await self._send(stream_id, f"❌ 角色 [{char_id}] 不存在。")
+            return
+
+        if char_id not in player.unlocked_chars:
+            await self._send(stream_id, f"❌ 你还没有遇到过 {char_meta['name']}，先去对应的楼层探索吧。")
+            return
+
+        # 检查是否已经在对话模式中
+        if player.fsm.is_dialog():
+            await self._send(stream_id, "❌ 你已经在对话模式中了。输入「结束对话」或「0」结束当前对话。")
+            return
+
+        # 进入对话模式
+        player.fsm.apply(GameEvent.ENTER_DIALOG)
+        player.dialog_char_id = char_id
+        player.dialog_history = []
+        self._save_player(user_id)
+
+        # 用 LLM 生成角色开场白
+        char_name = char_meta.get("name", char_id)
+        await self._send(
+            stream_id,
+            f"══ 与 {char_name} 的对话 ══\n"
+            f"(你可以自由输入想说的话，输入「结束对话」或「0」结束对话)\n",
+        )
+
+        # 构建 system prompt 并调用 LLM 生成开场白
+        system_prompt = build_system_prompt(char_id, self._people_relationship_data)
+        messages = build_message_list(system_prompt, [], f"{char_name}遇到了玩家，打一声招呼开始对话吧。")
+
+        try:
+            result = await self.ctx.llm.generate(prompt=messages)
+            if result.get("success"):
+                reply = result.get("response", "").strip()
+                if reply:
+                    # 保存到对话历史
+                    player.dialog_history.append({"role": "assistant", "content": reply})
+                    self._save_player(user_id)
+                    await self._send(stream_id, f"—— {char_name} ——\n\n{reply}")
+                    return
+        except Exception as exc:
+            self.ctx.logger.error("LLM 生成开场白失败: %s", exc)
+
+        # LLM 调用失败的 fallback
+        await self._send(stream_id, f"—— {char_name} ——\n\n「……你来了。」")
+
+    async def _do_dialog_choice(self, stream_id: str, user_input: str) -> None:
+        """处理对话模式中的玩家输入，调用 LLM 生成角色回复。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.fsm.is_dialog():
+            return
+
+        char_id = player.dialog_char_id
+        if not char_id:
+            player.fsm.apply(GameEvent.END_DIALOG)
+            player.dialog_char_id = None
+            self._save_player(user_id)
+            return
+
+        char_meta = CHARACTERS.get(char_id, {})
+        char_name = char_meta.get("name", char_id)
+        user_input = user_input.strip()
+
+        # 检查是否要结束对话
+        if is_end_dialog(user_input):
+            # 用 LLM 生成告别语
+            system_prompt = build_system_prompt(char_id, self._people_relationship_data)
+            farewell_history = player.dialog_history + [
+                {"role": "user", "content": f"{char_name}，我要走了。"}
+            ]
+            farewell_messages = build_message_list(system_prompt, farewell_history, f"{char_name}要离开了，自然地告别。")
+
+            player.fsm.apply(GameEvent.END_DIALOG)
+            player.dialog_char_id = None
+            player.dialog_history = []
+            self._save_player(user_id)
+
+            farewell_text = ""
+            try:
+                result = await self.ctx.llm.generate(prompt=farewell_messages)
+                if result.get("success"):
+                    farewell_text = result.get("response", "").strip()
+            except Exception:
+                pass
+
+            if farewell_text:
+                await self._send(stream_id, f"—— {char_name} ——\n\n{farewell_text}\n\n══ 对话结束 ══\n\n使用 /br said <角色名> 可以再次开始对话。")
+            else:
+                await self._send(stream_id, f"══ 对话结束 ══\n\n你结束了与 {char_name} 的对话。\n\n使用 /br said <角色名> 可以再次开始对话。")
+            return
+
+        # 正常对话：调用 LLM 生成回复
+        system_prompt = build_system_prompt(char_id, self._people_relationship_data)
+        history = trim_history(player.dialog_history)
+        messages = build_message_list(system_prompt, history, user_input)
+
+        # 先保存用户消息到历史
+        player.dialog_history.append({"role": "user", "content": user_input})
+        self._save_player(user_id)
+
+        try:
+            result = await self.ctx.llm.generate(prompt=messages)
+            if result.get("success"):
+                reply = result.get("response", "").strip()
+                if reply:
+                    player.dialog_history.append({"role": "assistant", "content": reply})
+                    player.dialog_history = trim_history(player.dialog_history)
+                    self._save_player(user_id)
+                    await self._send(stream_id, f"—— {char_name} ——\n\n{reply}")
+                    return
+        except Exception as exc:
+            self.ctx.logger.error("LLM 对话生成失败: %s", exc)
+
+        # LLM 调用失败的 fallback
+        await self._send(stream_id, f"—— {char_name} ——\n\n（{char_name}似乎走神了，没有听清你在说什么。）")
 
     async def _do_gift(self, stream_id: str, char_name: str, item_index: int) -> None:
         """赠送背包物品给角色以提升好感度。"""
@@ -2109,7 +2340,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         elif char_name in name_to_id:
             char_id = name_to_id[char_name]
         else:
-            await self._send(stream_id, f"❌ 不认识「{char_name}」，可赠送的角色：安可欣、安继年")
+            await self._send(stream_id, f"❌ 不认识「{char_name}」，可赠送的角色：安可欣、安继年、白宇、Luna、洛疏律")
             return
 
         char_meta = CHARACTERS.get(char_id)
@@ -2118,7 +2349,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             return
 
         if char_id not in player.unlocked_chars:
-            await self._send(stream_id, f"❌ 你还没有在 Alpha 基地遇到过 {char_meta['name']}，先去 Level 1 探索吧。")
+            await self._send(stream_id, f"❌ 你还没有遇到过 {char_meta['name']}，先去对应楼层探索吧。")
             return
 
         # 验证物品编号（1-based）

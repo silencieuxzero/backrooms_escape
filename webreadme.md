@@ -73,6 +73,7 @@
 | `/br invite <角色名>` | 邀请角色同行 | 好感度达到阈值后邀请角色一起探索 |
 | `/br dismiss` | 让同行角色返回 | 解散当前同行角色，返回 Alpha 基地 |
 | `/br gift <角色名> <编号>` | 赠送物品给角色 | 赠送背包物品提升好感度 |
+| `/br said <角色名>` | 与角色自由对话 | 与已解锁的角色进行 LLM 驱动的自由对话模式，输入任何内容角色都会根据性格回复 |
 | `/br quest` | 任务系统 | 查看/接受/提交任务，获得贡献点 |
 | `/br work` | 基地工作 | 在 Level 1 Alpha 基地参与解谜工作，获得贡献点 |
 | `/br help` | 游戏帮助 | 忘记命令时查看 |
@@ -150,7 +151,8 @@ backrooms_escape/
 │   ├── shut.py                # 群聊静默管理 — ShutManager
 │   ├── story_manage.py        # 数据加载层 — StoryManager / PeopleStoryManager /
 │   │                          #               QuestManager / WorkManager / BaseWorkStoryManager
-│   └── people_manage.py       # 角色业务层 — CharacterEncounterService / CHARACTERS 注册表
+│   ├── people_manage.py       # 角色业务层 — CharacterEncounterService / CHARACTERS 注册表
+│   └── dialogue_manage.py     # LLM 对话系统
 │
 ├── br_story/                  # 故事/剧情/数据目录
 │   ├── level_story/           # 后室背景故事纸条文本
@@ -158,6 +160,9 @@ backrooms_escape/
 │   ├── people_story/          # NPC 角色剧情 + 任务数据 + 人物关系数据
 │   │   ├── ankexin.txt
 │   │   ├── anjinian.txt
+│   │   ├── baiyu.txt
+│   │   ├── luna.txt
+│   │   ├── luo_shulv.txt
 │   │   ├── people_quests.json
 │   │   └── people_relationship.json
 │   └── base_story/            # 基地工作解谜数据 + 解锁故事
@@ -213,6 +218,15 @@ backrooms_escape/
                                   │ (角色业务层)       │
                                   │  .CHARACTERS      │
                                   │  .EncounterService│
+                                  └────────┬─────────┘
+                                           │ 调用生成回复
+                                           ▼
+                                  ┌──────────────────┐
+                                  │ renderer_load/   │
+                                  │ dialogue_manage  │
+                                  │ (LLM 对话系统)    │
+                                  │  .build_prompt   │
+                                  │  .message_list   │
                                   └──────────────────┘
 ```
 
@@ -244,6 +258,7 @@ backrooms_escape/
 | `NOT_STARTED` | 未开始游戏 | `/br start` |
 | `ALIVE` | 存活探索中（Level 0~398） | 全部命令 |
 | `AT_399` | 到达最终出口 | `/br exit`（触发通关） |
+| `DIALOG` | 对话模式 | `/br said` 命令 + 自由文本输入 |
 | `DEAD` | 生命值归零 | `/br start` 重新开始 |
 | `ESCAPED` | 成功逃出后室 | `/br start` 重新开始 |
 
@@ -251,7 +266,9 @@ backrooms_escape/
 
 ```
 NOT_STARTED ──start──▶ ALIVE ──reach_399──▶ AT_399 ──exit_399──▶ ESCAPED
-                         │                                              │
+                         │  │                                           │
+                         │  ├──enter_dialog──▶ DIALOG ──end_dialog──▶   │
+                         │  │                                           │
                          │ die                                           │ restart
                          ▼                                              │
                        DEAD ◀────────────────────────────────────────────┘
@@ -301,7 +318,7 @@ if not player.fsm.is_playable():
 每次尝试寻找出口消耗 **5 点理智值**。基础成功率 20%，每次失败后会递增成功率，确保你不会无限卡关。
 
 物品可为成功率提供加成：
-- **o4(层级钥匙)**：100% 找到出口
+- **o4(楼层钥匙)**：100% 找到出口
 - **o3(手电筒) / o5(M.E.G.CN 无线电)**：各 +5% 成功率
 
 ### 捷径系统
@@ -310,7 +327,7 @@ if not player.fsm.is_playable():
 
 ### 好感度系统
 
-在 Level 1（Alpha 基地）探索时，有 40% 概率遇到 NPC 角色（安可欣、安继年）。每次遭遇会自动增加好感度，达到阈值后可邀请角色同行。
+在对应楼层探索时，有 40% 概率遇到 NPC 角色。安可欣、安继年、Luna、洛疏律在 Level 1（Alpha 基地）出现，白宇在 Level 2（管道迷宫）出现。每次遭遇会自动增加好感度，达到阈值后可邀请角色同行。
 
 - **好感度获取**：每次遭遇角色自动增加好感度（默认 10 点）
 - **赠礼提升**：使用 `/br gift <角色名> <编号>` 赠送背包物品可额外提升好感度
@@ -324,7 +341,7 @@ if not player.fsm.is_playable():
 
 | 物品 | 默认好感度增加 |
 |------|--------------|
-| o4 层级钥匙 | +25 |
+| o4 楼层钥匙 | +25 |
 | o5 M.E.G.CN 无线电 | +15 |
 | o3 手电筒 | +10 |
 | o2 急救包 | +10 |
@@ -363,7 +380,7 @@ if not player.fsm.is_playable():
 | o1 | 杏仁水 | 消耗品 | 使用后恢复 30 点理智值，在探索和找出口中自动消耗前手动使用 |
 | o2 | 急救包 | 消耗品 | 使用后恢复 30 点生命值；在受伤事件中自动消耗一次（减伤 5 点） |
 | o3 | 手电筒 | 装备 | 被动生效：遭遇**笑魇/猎犬**时驱散（免伤）；其他实体伤害减 10；+5% 出口发现率 |
-| o4 | 层级钥匙 | 消耗品 | 持有后下次 `/br exit` 必能找到出口（100% 成功率），使用后消耗 |
+| o4 | 楼层钥匙 | 消耗品 | 持有后下次 `/br exit` 必能找到出口（100% 成功率），使用后消耗 |
 | o5 | M.E.G.CN 无线电 | 装备 | 被动生效：+5% 出口发现率 |
 | o6 | 能量棒 | 消耗品 | 使用后恢复 15 点生命值 |
 | o7 | 镇定剂 | 消耗品 | 使用后恢复 15 点理智值 |
@@ -385,7 +402,7 @@ if not player.fsm.is_playable():
 | `item_weight_o1` | 3 | o1 杏仁水（恢复 30 理智） | 20.0% |
 | `item_weight_o2` | 3 | o2 急救包（恢复 30 生命） | 20.0% |
 | `item_weight_o3` | 2 | o3 手电筒（驱散笑魇/猎犬） | 13.3% |
-| `item_weight_o4` | 1 | o4 层级钥匙（稀有，100% 出口） | 6.7% |
+| `item_weight_o4` | 1 | o4 楼层钥匙（稀有，100% 出口） | 6.7% |
 | `item_weight_o5` | 2 | o5 M.E.G.CN 无线电（+5% 出口率） | 13.3% |
 | `item_weight_o6` | 2 | o6 能量棒（恢复 15 生命） | 13.3% |
 | `item_weight_o7` | 2 | o7 镇定剂（恢复 15 理智） | 13.3% |
@@ -424,8 +441,8 @@ if not player.fsm.is_playable():
 
 1. **保持节奏**：每层先 `/br explore` 搜集物品，再用 `/br exit` 找出口。别跳过探索直接找出口，那样会错过补给品。
 2. **关注状态**：经常用 `/br status` 和 `/br inventory` 了解自己的情况。生命值或理智值低时优先考虑使用补给。
-3. **善用物品**：o4(层级钥匙) 是通关神器，o3(手电筒) 也能提高出口发现率。
-4. **不要死磕**：如果同一层 `/br exit` 多次失败，回头 `/br explore` 看看能不能找到 o4(层级钥匙)。
+3. **善用物品**：o4(楼层钥匙) 是通关神器，o3(手电筒) 也能提高出口发现率。
+4. **不要死磕**：如果同一层 `/br exit` 多次失败，回头 `/br explore` 看看能不能找到 o4(楼层钥匙)。
 5. **理智管理**：o1(杏仁水) 是关键资源，理智值耗尽会导致额外扣血。保持在 30 以上比较安全。
 
 ## 配置说明
@@ -472,7 +489,7 @@ output_mode = "text"      # 普通文本消息（默认）
 | `item_weight_o1` | 3 | o1 杏仁水（恢复 30 理智） | 20.0% |
 | `item_weight_o2` | 3 | o2 急救包（恢复 30 生命） | 20.0% |
 | `item_weight_o3` | 2 | o3 手电筒（驱散笑魇/猎犬） | 13.3% |
-| `item_weight_o4` | 1 | o4 层级钥匙（稀有，100% 出口） | 6.7% |
+| `item_weight_o4` | 1 | o4 楼层钥匙（稀有，100% 出口） | 6.7% |
 | `item_weight_o5` | 2 | o5 M.E.G.CN 无线电（+5% 出口率） | 13.3% |
 | `item_weight_o6` | 2 | o6 能量棒（恢复 15 生命） | 13.3% |
 | `item_weight_o7` | 2 | o7 镇定剂（恢复 15 理智） | 13.3% |
@@ -499,7 +516,7 @@ output_mode = "text"      # 普通文本消息（默认）
 | 第 8 次 | 0.2 + 7 × 0.1 | **90%** |
 | 第 9 次 | 0.2 + 8 × 0.1 | **100%**（达上限） |
 
-> 使用 o4(层级钥匙) 时概率直接锁定为 **100%**，不参与上述计算。携带 o3(手电筒) 或 o5(无线电) 时，各自额外 +5%（于公式计算后累加，上限仍为 100%）。
+> 使用 o4(楼层钥匙) 时概率直接锁定为 **100%**，不参与上述计算。携带 o3(手电筒) 或 o5(无线电) 时，各自额外 +5%（于公式计算后累加，上限仍为 100%）。
 
 ### 实体遭遇概率
 
@@ -627,7 +644,7 @@ user_ids = ["444555666"]
 | M001 | 初来乍到 | 到达 Level 5 | 50 贡献点 |
 | M002 | 信号搜寻 | 收集无线电（o5） | 80 贡献点 + 2 急救包 |
 | M003 | 深层探索 | 到达 Level 11 | 150 贡献点 |
-| M004 | 紧急补给 | 提交 2 个 o1 + 消耗 1 个 o2 | 60 贡献点 + 层级钥匙 |
+| M004 | 紧急补给 | 提交 2 个 o1 + 消耗 1 个 o2 | 60 贡献点 + 楼层钥匙 |
 | M005 | 归途之旅 | 到达 Level 399 | 500 贡献点 |
 
 ### 相关命令
@@ -690,6 +707,68 @@ backrooms_escape/
 2. 在 `br_story/people_story/people_relationship.json` 中添加该角色的数据条目
 3. 在 `plugin.py` 的 `_do_explore` 中该角色出现的楼层区域添加触发逻辑
 4. 重载插件生效
+
+## 对话系统（LLM 驱动）
+
+`/br said <角色名>` 命令可与已解锁的角色进入自由对话模式。该模式下，角色的回复由麦麦的 LLM 实时生成，角色卡数据作为临时 system prompt。
+
+### 使用方式
+
+```
+/br said 安可欣         → 进入对话模式，LLM 生成开场白
+（自由输入任意内容）     → LLM 根据角色性格和后室世界观生成回复
+"结束对话" / "0" / "end" → LLM 生成告别语后退出
+```
+
+### 系统架构
+
+对话模式下，玩家输入的非 `/br` 消息会被 Hook 自动拦截并转发到对话处理器。每次 LLM 调用都会携带：
+
+- **System prompt**：从 `people_relationship.json` 和 `CHARACTERS` 注册表加载的角色完整设定（姓名、身份、年龄、性格、背景描述等）
+- **对话历史**：最近 6 轮对话，确保上下文连贯
+- **当前输入**：玩家自由输入的文本
+
+### 数据流
+
+```
+/br said 安可欣
+    │
+    ├─ 状态机转移 ALIVE → DIALOG
+    ├─ build_system_prompt() → 从角色卡构建 system prompt
+    ├─ self.ctx.llm.generate() → 调用 LLM 生成开场白
+    └─ 保存到 dialog_history
+
+[玩家输入任意文本]
+    │
+    ├─ Hook 拦截 → _do_dialog_choice()
+    ├─ is_end_dialog()? → 是 → 告别结束
+    ├─ build_message_list(system_prompt, history, input)
+    ├─ self.ctx.llm.generate() → 生成角色回复
+    └─ trim_history() → 保存并裁剪历史
+```
+
+### 角色卡 prompt 示例
+
+```
+你正在扮演后室世界中的角色「安可欣」。
+=== 角色设定 ===
+姓名：安可欣
+身份：M.E.G.CN 信息分析组探员
+年龄：22
+性格：温和可靠，善解人意
+...
+=== 扮演规则 ===
+1. 始终使用中文回复...
+2. 完全代入角色...
+...
+```
+
+### 注意事项
+
+- 只有已解锁的角色才能对话（先通过探索遭遇解锁）
+- 对话历史保存最近 6 轮，更早的对话会被裁剪
+- 输入「结束对话」「0」「end」等可结束对话
+- LLM 调用失败时有 fallback 回复，不会导致崩溃
 
 ## 自定义故事文本
 
@@ -771,7 +850,7 @@ backrooms_escape/
 
 ## 人物剧情系统
 
-游戏中，在 Level 1（Alpha 基地）探索时有 40% 概率遇到基地中的 NPC 角色（安可欣、安继年）。首次遇到时对方会赠送 **2 瓶杏仁水**。每段剧情通过合并转发消息展示。角色在首次遭遇后自动解锁。
+游戏中，探索时有 40% 概率遇到基地中的 NPC 角色（安可欣、安继年、白宇、Luna、洛疏律）。首次遇到时对方会赠送物品作为见面礼。每段剧情通过合并转发消息展示。角色在首次遭遇后自动解锁。
 
 ### 自定义角色剧情文件
 
@@ -782,7 +861,9 @@ backrooms_escape/
 ├── br_story/people_story/
 │   ├── ankexin.txt             ← 安可欣（信息分析组探员，7段剧情）
 │   ├── anjinian.txt            ← 安继年（工程部技师，7段剧情）
-│   └── people_relationship.json  ← 人物关系配置文件（JSON 格式）
+│   ├── baiyu.txt               ← 白宇（独立流浪者，7段剧情）
+│   ├── luna.txt                ← Luna / 陆遥（独立研究员，7段剧情）
+│   └── luo_shulv.txt           ← 洛疏律（信息系统管理员，7段剧情）
 └── ...
 ```
 
@@ -859,7 +940,7 @@ backrooms_escape/
 | `health` | int | 当前生命值 |
 | `sanity` | int | 当前理智值 |
 | `inventory` | array | 背包物品列表 |
-| `state` | string | 游戏状态：`"NOT_STARTED"` / `"ALIVE"` / `"AT_399"` / `"DEAD"` / `"ESCAPED"` |
+| `state` | string | 游戏状态：`"NOT_STARTED"` / `"ALIVE"` / `"DIALOG"` / `"AT_399"` / `"DEAD"` / `"ESCAPED"` |
 | `exit_attempts` | int | 当前楼层寻找出口的累计次数 |
 | `pending_note` | string\|null | 待阅读的纸条内容，无则为 null |
 | `unlocked_chars` | array | 已解锁的角色 ID 列表 |

@@ -1,5 +1,33 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.1.1 (2026-07-09)
+
+### 新增
+- **新角色「白宇」**：28岁，前 M.E.G.CN 外勤勘探员，沉默寡言的独行流浪者，在 **Level 2** 管道迷宫中出现。见面礼：手电筒
+- **新角色「Luna」（陆遥）**：26岁，后室现象独立研究员，曾在意大利留学。在 **Level 1** Alpha 基地通讯室中出现。见面礼：镇定剂
+- **新角色「洛疏律」**：24岁，M.E.G.CN 信息系统管理员，戴黑框眼镜的务实派技术员。在 **Level 1** Alpha 基地数据中心中出现。见面礼：能量棒
+- **对话系统**：`/br said <角色名>` 进入自由对话模式，通过麦麦 LLM 实时生成角色回复，角色卡作为临时 system prompt
+- `people_relationship.json` 新增 `personality`（性格）字段，共 5 个角色
+- `CHARACTERS` 注册表新增 `level` 字段，支持角色在不同楼层出现
+- 状态机新增 `DIALOG` 状态及 `ENTER_DIALOG` / `END_DIALOG` 事件
+- `PlayerState` 新增 `dialog_history` 字段，保存 LLM 对话历史
+
+### 变更
+- 全局用语统一："层级" → "楼层"（涉及 12 个文件共 36 处）
+- 角色遭遇系统从硬编码 Level 1 改为按角色 `level` 字段动态筛选
+- `/br said`、`/br invite`、`/br gift` 命令提示列表同步更新
+- 合并转发模式优化：游戏事件消息拆分为三段（当前事件 + 人物状态 + 可用命令）合并发送
+- 项目结构文档、README、webreadme 同步更新
+
+### 修复
+- 修复 `_do_said` 缺少 `_save_player` 调用导致对话状态不持久化的问题
+- 修复对话模式中 `dialog_node_id` 默认值不一致的问题
+- 删除 `render_start_nodes()` 死代码 41 行
+- 修复 `renderer.py` 中 5 处硬编码角色名映射（`render_status`、`render_explore`、`render_exit_found`、`render_level399_escape`），改为从 `CHARACTERS` 注册表动态获取，新增角色无需再手动修改
+- 新增 baiyu、luna、luo_shulv 三种角色的同伴探索台词（各 4 条）和出口台词
+- 修复角色遭遇 header 硬编码（`if char_id == "ankexin"`），改为动态显示楼层和角色名
+- 修复 `plugin.py` 中 4 处 Level 1 硬编码提示（`_do_invite`、`_do_dismiss`、`_do_gift`），改为根据角色 `level` 字段动态生成
+
 ## v1.1.0 (2026-07-09)
 
 ### 重构
