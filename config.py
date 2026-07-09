@@ -103,6 +103,7 @@ class GameConfig(PluginConfigBase):
     # ---- 出口概率 ----
     base_exit_chance: float = Field(
         default=0.2,
+        ge=0.0, le=1.0,
         description="成功找到出口的基础概率（0.0~1.0）",
         json_schema_extra={
             "label": "基础出口概率",
@@ -112,6 +113,7 @@ class GameConfig(PluginConfigBase):
     )
     exit_chance_increment: float = Field(
         default=0.1,
+        ge=0.0, le=1.0,
         description="每次寻找失败后成功概率的提升值",
         json_schema_extra={
             "label": "出口概率递增值",
@@ -174,6 +176,45 @@ class GameConfig(PluginConfigBase):
             "label": "小型物资箱概率",
             "hint": "触发补给事件时出现小型物资箱的概率。小型箱必出杏仁水。",
             "order": 11,
+        },
+    )
+
+    # ---- 好感度配置 ----
+    favorability_threshold: int = Field(
+        default=70,
+        description="邀请角色一起探索所需的好感度阈值",
+        json_schema_extra={
+            "label": "邀请好感度阈值",
+            "hint": "与角色的好感度达到此值后，可以使用 /br invite <角色名> 邀请对方一起探索后室。",
+            "order": 19,
+        },
+    )
+    favorability_per_encounter: int = Field(
+        default=10,
+        description="每次在 Level 1 遇到角色时增加的好感度",
+        json_schema_extra={
+            "label": "单次遭遇好感度",
+            "hint": "在 Level 1 的 Alpha 基地遇到角色并互动时，好感度增加的值。",
+            "order": 20,
+        },
+    )
+
+    # ---- 赠礼配置 ----
+    gift_favorability_values: dict[str, int] = Field(
+        default_factory=lambda: {
+            "o1": 5,
+            "o2": 5,
+            "o3": 10,
+            "o4": 25,
+            "o5": 15,
+            "o6": 5,
+            "o7": 5,
+        },
+        description="各物品作为赠礼时的好感度值映射（key=物品name，value=好感度）",
+        json_schema_extra={
+            "label": "赠礼好感度映射",
+            "hint": "将背包中的物品赠送给角色时，各物品增加的好感度值。",
+            "order": 21,
         },
     )
 

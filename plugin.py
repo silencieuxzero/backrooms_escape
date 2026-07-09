@@ -23,6 +23,7 @@ from .renderer import (
     GameState,
     GameEvent,
     GameStateMachine,
+    CHARACTERS,
     CharacterEncounterService,
     StoryManager,
     PeopleStoryManager,
@@ -314,6 +315,8 @@ class PlayerState:
     completed_works: set[str] = field(default_factory=set)  # 已完成的工作 ID
     work_stories: set[str] = field(default_factory=set)  # 已解锁的工作故事 ID
     l1_explore_count: int = 0  # Level 1 中已探索次数（达到阈值触发日常任务）
+    favorability: dict[str, int] = field(default_factory=dict)  # 角色好感度 {char_id: 数值}
+    companion: str | None = None  # 当前同行的角色 ID，None 表示无同伴
 
 
 # ==================== 插件主体 ====================
@@ -716,6 +719,59 @@ class BackroomsGamePlugin(MaiBotPlugin):
         await self._do_work_list(stream_id)
         return True, "工作面板已显示", 1
 
+    @Command(
+        "br_invite",
+        description="邀请角色同行 — 好感度达标后可邀请角色一起探索后室",
+        pattern=r"^/br\s+invite\s+(\S+)",
+    )
+    async def handle_invite(self, **kwargs: Any):
+        """邀请角色一起探索。"""
+        stream_id = kwargs.get("stream_id", "")
+        message = kwargs.get("message", {})
+        raw_text = str(
+            message.get("raw_message")
+            or message.get("text")
+            or message.get("message")
+            or ""
+        )
+        m = re.search(r"/br\s+invite\s+(\S+)", raw_text)
+        if m:
+            await self._do_invite(stream_id, m.group(1).strip().lower())
+        return True, "邀请处理完成", 1
+
+    @Command(
+        "br_dismiss",
+        description="解散同行 — 让同行的角色返回基地",
+        pattern=r"^/br\s+dismiss$",
+    )
+    async def handle_dismiss(self, **kwargs: Any):
+        """解散同行角色。"""
+        stream_id = kwargs.get("stream_id", "")
+        await self._do_dismiss(stream_id)
+        return True, "解散处理完成", 1
+
+    @Command(
+        "br_gift",
+        description="赠送礼物 — 将背包物品赠送给角色提升好感度",
+        pattern=r"^/br\s+gift\s+(\S+)\s+(\d+)",
+    )
+    async def handle_gift(self, **kwargs: Any):
+        """赠送礼物给角色。"""
+        stream_id = kwargs.get("stream_id", "")
+        message = kwargs.get("message", {})
+        raw_text = str(
+            message.get("raw_message")
+            or message.get("text")
+            or message.get("message")
+            or ""
+        )
+        m = re.search(r"/br\s+gift\s+(\S+)\s+(\d+)", raw_text)
+        if m:
+            char_name = m.group(1).strip().lower()
+            item_index = int(m.group(2))
+            await self._do_gift(stream_id, char_name, item_index)
+        return True, "赠礼处理完成", 1
+
     # ==================== 访问控制拦截 ====================
 
     @staticmethod
@@ -1042,6 +1098,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
             "completed_works": sorted(player.completed_works),
             "work_stories": sorted(player.work_stories),
             "l1_explore_count": player.l1_explore_count,
+            "favorability": player.favorability,
+            "companion": player.companion,
         }
         filepath = self._player_file_path(user_id)
         try:
@@ -1081,6 +1139,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
             completed_works=set(data.get("completed_works", [])),
             work_stories=set(data.get("work_stories", [])),
             l1_explore_count=data.get("l1_explore_count", 0),
+            favorability=data.get("favorability", {}),
+            companion=data.get("companion"),
         )
 
     def _delete_player_save(self, user_id: str) -> None:
@@ -1461,7 +1521,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         # Level 1 特殊：在 M.E.G.CN Alpha 基地遇到角色
         # 由 CharacterEncounterService 统一处理角色选择、初见/常规判断、
         # 礼品发放和任务发放。新增角色只需在 CHARACTERS 注册表中添加。
-        char_encounter: tuple[str, str, str | None, str | None] | None = None
+        char_encounter: tuple[str, str, str | None, str | None, int, int] | None = None
         result = self._char_encounter_service.roll_encounter(
             level=player.current_level,
             unlocked_chars=player.unlocked_chars,
@@ -1469,11 +1529,13 @@ class BackroomsGamePlugin(MaiBotPlugin):
             people_story_manager=self._people_manager,
             quest_manager=self._quest_manager,
             ankexin_task_chance=cfg.ankexin_task_chance,
+            favorability_per_encounter=cfg.favorability_per_encounter,
         )
         if result is not None:
             char_encounter = (
                 result.char_id, result.story_text,
                 result.gift_text, result.quest_offer,
+                result.favorability_increase, result.current_favorability,
             )
 
         # 理智值过低效果
@@ -1488,6 +1550,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             interval = cfg.work_trigger_interval
             if player.l1_explore_count >= interval:
                 player.l1_explore_count = 0
+                work_triggered = True
                 # 找一个未完成的工作派发给玩家
                 available = self._work_manager.get_available_works(player.completed_works)
                 if available:
@@ -1502,11 +1565,17 @@ class BackroomsGamePlugin(MaiBotPlugin):
             player.fsm.apply(GameEvent.DIE)
             del self._players[user_id]
             self._delete_player_save(user_id)
+            ctx = self._make_ctx(player)
+            await self._send(
+                stream_id,
+                self._renderer.render_explore(ctx, event_text, crate_result, health_cost, note_found, entity_encounter, char_encounter, work_triggered, work_assigned, companion=player.companion),
+            )
+            return
 
         ctx = self._make_ctx(player)
         await self._send(
             stream_id,
-            self._renderer.render_explore(ctx, event_text, crate_result, health_cost, note_found, entity_encounter, char_encounter, work_triggered, work_assigned),
+            self._renderer.render_explore(ctx, event_text, crate_result, health_cost, note_found, entity_encounter, char_encounter, work_triggered, work_assigned, companion=player.companion),
         )
         self._save_player(user_id)
 
@@ -1524,7 +1593,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if player.current_level == 399:
             await self._send(
                 stream_id,
-                self._renderer.render_level399_escape(player.current_level),
+                self._renderer.render_level399_escape(player.current_level, player.companion),
             )
             del self._players[user_id]
             self._delete_player_save(user_id)
@@ -1541,6 +1610,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
             exit_chance += 0.05
         if self._has_item(player, "o5"):
             exit_chance += 0.05
+        if player.companion:
+            exit_chance += 0.05  # 同伴帮助搜索，+5% 出口率
         exit_chance = min(exit_chance, 1.0)
 
         if random.random() < exit_chance:
@@ -1554,7 +1625,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 ctx = self._make_ctx(player)
                 await self._send(
                     stream_id,
-                    self._renderer.render_level399_escape(from_level + 1),
+                    self._renderer.render_level399_escape(399, player.companion),
                 )
                 del self._players[user_id]
                 self._delete_player_save(user_id)
@@ -1588,7 +1659,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             ctx = self._make_ctx(player)
             await self._send(
                 stream_id,
-                self._renderer.render_exit_found(old_level_info, ctx, new_level_info, shortcut_desc, from_level),
+                self._renderer.render_exit_found(old_level_info, ctx, new_level_info, shortcut_desc, from_level, player.companion),
             )
 
             # 检测任务进度：到达目标楼层
@@ -1634,6 +1705,15 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 player.fsm.apply(GameEvent.DIE)
                 del self._players[user_id]
                 self._delete_player_save(user_id)
+                ctx = self._make_ctx(player)
+                await self._send(
+                    stream_id,
+                    self._renderer.render_exit_not_found(
+                        ctx, player.exit_attempts, event_text,
+                        ex_crate_result, ex_health_cost, ex_note_found,
+                    ),
+                )
+                return
 
             ctx = self._make_ctx(player)
             await self._send(
@@ -1658,7 +1738,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         inventory_text = self._format_inventory(player)
         await self._send(
             stream_id,
-            self._renderer.render_status(ctx, inventory_text, player.currency),
+            self._renderer.render_status(ctx, inventory_text, player.currency, player.favorability, player.companion),
         )
 
     async def _do_show_inventory(self, stream_id: str) -> None:
@@ -1702,7 +1782,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             unlocked = player.unlocked_chars
         await self._send(
             stream_id,
-            self._renderer.render_people_net(self._people_net_text, unlocked),
+            self._renderer.render_people_net(self._people_net_text, unlocked, player.favorability if player else None),
         )
 
     # ==================== 任务系统 ====================
@@ -1923,6 +2003,148 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 stream_id,
                 self._renderer.render_work_failure(work),
             )
+
+    # ==================== 好感度 & 同伴系统 ====================
+
+    async def _do_invite(self, stream_id: str, char_name: str) -> None:
+        """邀请角色一起探索后室。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.fsm.is_playable():
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        # 将中文名映射为角色 ID
+        name_to_id = {
+            meta["name"]: cid
+            for cid, meta in CHARACTERS.items()
+        }
+        # 也支持直接输入角色 ID
+        if char_name in CHARACTERS:
+            char_id = char_name
+        elif char_name in name_to_id:
+            char_id = name_to_id[char_name]
+        else:
+            await self._send(stream_id, f"❌ 不认识「{char_name}」，可邀请的角色：安可欣、安继年")
+            return
+
+        char_meta = CHARACTERS.get(char_id)
+        if not char_meta:
+            await self._send(stream_id, f"❌ 角色 [{char_id}] 不存在。")
+            return
+
+        if char_id not in player.unlocked_chars:
+            await self._send(stream_id, f"❌ 你还没有在 Alpha 基地遇到过 {char_meta['name']}，先去 Level 1 探索吧。")
+            return
+
+        current_fav = player.favorability.get(char_id, 0)
+        threshold = self.config.game.favorability_threshold
+        if current_fav < threshold:
+            await self._send(
+                stream_id,
+                f"❌ 与 {char_meta['name']} 的好感度还不够（当前 {current_fav}/{threshold}）。\n"
+                f"多去 Level 1 的 Alpha 基地遇到她/他，提升好感度吧。",
+            )
+            return
+
+        if player.companion:
+            current = CHARACTERS.get(player.companion, {}).get("name", player.companion)
+            await self._send(
+                stream_id,
+                f"⚠️ {current} 正在与你同行。先使用 /br dismiss 送她/他回去，再邀请其他人。",
+            )
+            return
+
+        player.companion = char_id
+        self._save_player(user_id)
+        await self._send(
+            stream_id,
+            f"══════════════════════\n"
+            f"  🤝 同行邀请\n"
+            f"══════════════════════\n\n"
+            f"「{char_meta['name']}，愿意和我一起探索后面的楼层吗？」\n\n"
+            f"{char_meta['name']}微微一笑，点头答应了。\n\n"
+            f"从现在起，{char_meta['name']} 会与你一同前行，\n"
+            f"在探索时提供帮助（出口率 +5%），并分享沿途的见闻。\n\n"
+            f"使用 /br dismiss 可以让她/他返回 Alpha 基地。",
+        )
+
+    async def _do_dismiss(self, stream_id: str) -> None:
+        """解散同行角色。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.fsm.is_playable():
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        if not player.companion:
+            await self._send(stream_id, "ℹ️ 当前没有角色与你同行。")
+            return
+
+        char_name = CHARACTERS.get(player.companion, {}).get("name", player.companion)
+        player.companion = None
+        self._save_player(user_id)
+        await self._send(
+            stream_id,
+            f"══════════════════════\n"
+            f"  👋 告别\n"
+            f"══════════════════════\n\n"
+            f"你送 {char_name} 回到了 Alpha 基地。\n"
+            f"「下次需要我的时候，随时来 Level 1 找我。」\n\n"
+            f"{char_name} 挥了挥手，转身消失在走廊尽头。",
+        )
+
+    async def _do_gift(self, stream_id: str, char_name: str, item_index: int) -> None:
+        """赠送背包物品给角色以提升好感度。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.fsm.is_playable():
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+
+        # 将中文名映射为角色 ID
+        name_to_id = {meta["name"]: cid for cid, meta in CHARACTERS.items()}
+        if char_name in CHARACTERS:
+            char_id = char_name
+        elif char_name in name_to_id:
+            char_id = name_to_id[char_name]
+        else:
+            await self._send(stream_id, f"❌ 不认识「{char_name}」，可赠送的角色：安可欣、安继年")
+            return
+
+        char_meta = CHARACTERS.get(char_id)
+        if not char_meta:
+            await self._send(stream_id, f"❌ 角色 [{char_id}] 不存在。")
+            return
+
+        if char_id not in player.unlocked_chars:
+            await self._send(stream_id, f"❌ 你还没有在 Alpha 基地遇到过 {char_meta['name']}，先去 Level 1 探索吧。")
+            return
+
+        # 验证物品编号（1-based）
+        if item_index < 1 or item_index > len(player.inventory):
+            await self._send(stream_id, self._renderer.render_item_not_found(str(item_index)))
+            return
+
+        # 取出物品
+        item = player.inventory.pop(item_index - 1)
+        item_name = item.get("name", "")
+        item_display = item.get("display_name", item_name)
+
+        # 计算好感度增加值
+        gift_values = self.config.game.gift_favorability_values
+        fav_increase = gift_values.get(item_name, 1)  # 未配置的物品默认 +1
+        old_fav = player.favorability.get(char_id, 0)
+        new_fav = old_fav + fav_increase
+        player.favorability[char_id] = new_fav
+
+        await self._send(
+            stream_id,
+            self._renderer.render_gift_result(
+                char_meta["name"], item_display, fav_increase, new_fav,
+            ),
+        )
+        self._save_player(user_id)
 
     async def _do_say(self, stream_id: str) -> None:
         """随机输出一句名人名言。"""

@@ -15,6 +15,10 @@
 - 引入有限状态机（FSM）：新建 `renderer_load/state_machine.py`，定义 `GameState`（5 个状态）、`GameEvent`（7 个事件）、`GameStateMachine` 类
 - 角色系统模块化：新建 `renderer_load/people_manage.py`，包含 `Character` 注册表 + `CharacterEncounterService`
 - `renderer_load/people.py` → `people_manage.py`，`renderer_load/story.py` → `story_manage.py`，模块名统一加 `_manage` 后缀
+- **好感度系统**：角色遭遇时自动增加好感度，`/br status` 和 `/br people_net` 面板可查看
+- **同行系统**：好感度达到阈值（默认70）后可用 `/br invite <角色名>` 邀请角色同行，同行时出口率 +5%，探索时触发同伴互动台词
+- **赠礼系统**：使用 `/br gift <角色名> <物品编号>` 可将背包物品赠送给角色提升好感度，不同物品增加的好感度可在配置文件中自定义
+- 配置文件新增 `favorability_threshold`（邀请阈值）、`favorability_per_encounter`（单次遭遇好感度）和 `gift_favorability_values`（赠礼好感度映射）
 
 ### 变更
 - `PlayerState.game_started: bool` 替换为 `fsm: GameStateMachine`，状态机管理游戏核心流程而非布尔标志
@@ -26,6 +30,13 @@
 ### 修复
 - 修复 `handle_read` 早期返回签名不匹配：裸 `return` → `return True, "未开始游戏", 1`
 - 修复 `__pycache__` 被 git 跟踪的问题：从索引中移除，确保 `.gitignore` 规则生效
+- 修复 `/br invite`、`/br dismiss` 缺少 `_save_player` 导致同行状态不持久化的问题
+- 修复 `pending_quest_offer` 在无任务发放时不清除旧值导致残留过期任务 ID
+- 修复 `CHARACTERS` 未导入 `plugin.py` 导致 `/br invite`、`/br gift`、`/br dismiss` 必崩 `NameError`
+- 修复 `_do_explore` 未传递 `favorability_per_encounter` 参数导致好感度无法累加
+- 修复 Level 11 捷径通关显示 "12 个楼层" 的文本错误，统一传入 `399`
+- 移除 `FAVORABILITY_PER_ENCOUNTER` 常量死代码（已定义但未被引用）
+- 为 `base_exit_chance` 和 `exit_chance_increment` 添加 `ge=0.0, le=1.0` 范围校验，防止非法配置
 
 ## v1.0.9 (2026-06-20)
 

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import random
 from typing import Any
 
 from .config import GameConfig
@@ -17,6 +18,7 @@ from .config import GameConfig
 from .renderer_load import (
     CharacterEncounterService,
     EncounterResult,
+    CHARACTERS,
     ShutManager,
     GameState,
     GameEvent,
@@ -33,6 +35,7 @@ __all__ = [
     "BackroomsRenderer",
     "CharacterEncounterService",
     "EncounterResult",
+    "CHARACTERS",
     "ShutManager",
     "GameState",
     "GameEvent",
@@ -169,6 +172,9 @@ class BackroomsRenderer:
             "  /br use <编号> — 使用背包中对应编号的物品\n"
             "  /br status   — 查看当前状态\n"
             "  /br inventory — 查看背包\n"
+            "  /br invite <名> — 邀请好感度达标的角色一起探索\n"
+            "  /br dismiss    — 让同行的角色返回基地\n"
+            "  /br gift <名> <编号> — 赠送背包物品给角色（提升好感度）\n"
             "  /br quest    — 查看任务面板\n"
             "  /br work     — Alpha 基地工作（解谜）\n"
             "  /br help     — 游戏帮助\n\n"
@@ -208,6 +214,9 @@ class BackroomsRenderer:
                 "  /br use <编号> — 使用背包中对应编号的物品\n"
                 "  /br status    — 查看当前状态\n"
                 "  /br inventory — 查看背包\n"
+                "  /br invite <名> — 邀请好感度达标的角色一起探索\n"
+                "  /br dismiss    — 让同行的角色返回基地\n"
+                "  /br gift <名> <编号> — 赠送背包物品给角色（提升好感度）\n"
                 "  /br quest     — 查看任务面板\n"
                 "  /br work      — Alpha 基地工作（解谜）\n"
                 "  /br help      — 游戏帮助\n\n"
@@ -256,9 +265,10 @@ class BackroomsRenderer:
         health_cost: int | None,
         note_found: bool,
         entity_encounter: tuple[str, dict, int] | None,
-        char_encounter: tuple[str, str, str | None, str | None] | None = None,
+        char_encounter: tuple[str, str, str | None, str | None, int, int] | None = None,
         work_triggered: bool = False,
         work_assigned: tuple[str, str] | None = None,
+        companion: str | None = None,
     ) -> str:
         """探索结果消息。
 
@@ -269,9 +279,10 @@ class BackroomsRenderer:
             health_cost: 事件造成的生命值伤害（None 表示无伤害）。
             note_found: 是否发现了纸条。
             entity_encounter: (实体名, 实体数据, 实际伤害) 或 None。
-            char_encounter: (角色ID, 剧情文本, 赠送文本, 任务ID) 或 None。
+            char_encounter: (角色ID, 剧情文本, 赠送文本, 任务ID, 好感度增量, 当前好感度) 或 None。
             work_triggered: 是否有新的基地工作可用。
             work_assigned: (工作ID, 工作标题) — 安可欣主动派发的日常工作任务。
+            companion: 当前同行的角色 ID，None 表示无同伴。
         """
         lines = [f"🔍 你在 {ctx.level_info['title']} 中探索……"]
 
@@ -312,7 +323,7 @@ class BackroomsRenderer:
 
         # 角色遭遇
         if char_encounter:
-            char_id, story_text, char_gift, quest_offer = char_encounter
+            char_id, story_text, char_gift, quest_offer, fav_inc, fav_current = char_encounter
             if char_id == "ankexin":
                 lines.append("\n═════ 你在 Alpha 基地遇到了安可欣 ═════")
                 lines.append("")
@@ -328,8 +339,11 @@ class BackroomsRenderer:
             if char_gift:
                 lines.append(char_gift)
             if quest_offer:
-                lines.append(f"\n📋 安可欣给你布置了一个新任务！")
+                giver_name = CHARACTERS.get(char_id, {}).get("name", char_id)
+                lines.append(f"\n📋 {giver_name}给你布置了一个新任务！")
                 lines.append(f"使用 /br quest accept {quest_offer} 接受任务，或 /br quest 查看详情。")
+            if fav_inc > 0:
+                lines.append(f"\n💝 好感度 +{fav_inc}（当前 {fav_current}）")
 
         # 理智值过低
         warn = self.low_sanity_warning(ctx.sanity)
@@ -360,6 +374,27 @@ class BackroomsRenderer:
             lines.append(f"→ 使用 /br work start {wid} 查看详情并开始工作")
             lines.append("═══════════════════════════════════")
 
+        # 同伴同行提示
+        if companion:
+            char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(companion, companion)
+            companion_lines = {
+                "ankexin": [
+                    f"\n💬 {char_name} 跟在你身边，警惕地观察着四周。",
+                    f"\n💬 {char_name} 拿出笔记本快速记下了些什么。",
+                    f"\n💬 「这边看起来安全。」{char_name}低声说道。",
+                    f"\n💬 {char_name} 递给你一瓶杏仁水。「补充点水分吧。」",
+                ],
+                "anjinian": [
+                    f"\n💬 {char_name} 拍了拍你的肩膀。「别担心，有我在呢。」",
+                    f"\n💬 「这条通道的结构很稳固。」{char_name}检查着墙壁说道。",
+                    f"\n💬 {char_name} 掏出一个小工具摆弄着。「说不定能用上。」",
+                    f"\n💬 「嘿，前面好像有动静。」{char_name}压低声音说。",
+                ],
+            }
+            c_lines = companion_lines.get(companion)
+            if c_lines:
+                lines.append(random.choice(c_lines))
+
         # 引导
         if ctx.health > 0 and ctx.current_level < 399:
             lines.extend(self.next_step_hint(
@@ -375,6 +410,7 @@ class BackroomsRenderer:
         new_level_info: dict[str, Any],
         shortcut_desc: str | None,
         from_level: int,
+        companion: str | None = None,
     ) -> str:
         """找到出口时的消息。"""
         lines = [f"🚪 你仔细搜索着 {old_level_info['title']} 的每一个角落……"]
@@ -383,6 +419,15 @@ class BackroomsRenderer:
             lines.append(f"✨ {shortcut_desc}")
         else:
             lines.append("你找到了出口！四周的景象开始扭曲模糊……")
+
+        # 同伴互动
+        if companion:
+            char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(companion, companion)
+            companion_exit_lines = {
+                "ankexin": f"\n💬 {char_name} 兴奋地说：「就是这里！我们走！」",
+                "anjinian": f"\n💬 「找到了！」{char_name} 咧嘴一笑，「好样的，搭档！」",
+            }
+            lines.append(companion_exit_lines.get(companion, ""))
 
         nli = new_level_info
         lines.append(f"\n📍 你切入了 {nli['title']}")
@@ -440,7 +485,9 @@ class BackroomsRenderer:
 
         return "\n".join(lines)
 
-    def render_status(self, ctx: RenderContext, inventory_text: str, currency: int = 0) -> str:
+    def render_status(self, ctx: RenderContext, inventory_text: str, currency: int = 0,
+                       favorability: dict[str, int] | None = None,
+                       companion: str | None = None) -> str:
         """探员状态面板。"""
         h_label = self.health_label(ctx.health, ctx.initial_health)
         s_label = self.sanity_label(ctx.sanity, ctx.initial_sanity)
@@ -458,6 +505,21 @@ class BackroomsRenderer:
         ]
         if currency > 0:
             lines.append(f"💰 贡献点：{currency}\n")
+
+        # 好感度信息
+        if favorability:
+            lines.append("\n💝 角色好感度：")
+            for char_id, fav in sorted(favorability.items()):
+                char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(char_id, char_id)
+                heart = "❤️" * min(5, fav // 20) + "🤍" * (5 - min(5, fav // 20))
+                lines.append(f"  {char_name}：{fav}  {heart}")
+
+        # 同伴信息
+        if companion:
+            char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(companion, companion)
+            lines.append(f"\n👥 同行：{char_name}（出口率 +5%）")
+            lines.append(f"  使用 /br dismiss 可以让她/他返回基地。")
+
         lines += [
             f"\n📦 背包物品：\n{inventory_text}\n\n"
             f"🏁 通关进度：{progress}%  [{bar}]\n\n"
@@ -488,10 +550,13 @@ class BackroomsRenderer:
             "  /br story    — 故事档案（/br story 查看列表 / <ID> 查看详情）\n"
             "  /br test      — 测试插件连通性（验证插件是否正常）\n"
             "  /br start     — 开始新游戏\n"
-            "  /br explore    — 探索当前楼层（消耗5理智，可能遇敌/发现物品/捡到纸条）\n"
-            "  /br exit       — 尝试寻找出口（消耗10理智，每次失败增加成功概率）\n"
+            "  /br explore    — 探索当前楼层（消耗2理智，可能遇敌/发现物品/捡到纸条）\n"
+            "  /br exit       — 尝试寻找出口（消耗5理智，每次失败增加成功概率）\n"
             "  /br read       — 阅读捡到的纸条（通过合并转发消息展示）\n"
             "  /br status     — 查看探员状态\n"
+            "  /br invite <名> — 邀请好感度达标的角色一起探索（出口率 +5%）\n"
+            "  /br dismiss    — 让同行的角色返回基地\n"
+            "  /br gift <名> <编号> — 赠送背包物品给角色（提升好感度）\n"
             "  /br inventory  — 查看背包\n"
             "  /br use <编号> — 使用背包中的物品（如 /br use 1）\n"
             "  /br quest — 查看任务面板 /br quest accept <ID> / <ID> submit\n"
@@ -510,12 +575,27 @@ class BackroomsRenderer:
             "祝你好运，M.E.G.CN 探员！后室等着你去征服。"
         )
 
-    def render_people_net(self, people_data: dict[str, dict], unlocked_chars: set[str]) -> str:
+    def render_gift_result(self, char_name: str, item_name: str,
+                           fav_increase: int, new_fav: int) -> str:
+        """赠礼结果消息。"""
+        return (
+            f"══════════════════════\n"
+            f"  🎁 赠 送 礼 物\n"
+            f"══════════════════════\n\n"
+            f"你将【{item_name}】送给了 {char_name}。\n\n"
+            f"「谢谢你！这个正好能用上。」\n"
+            f"{char_name} 开心地收下了礼物。\n\n"
+            f"💝 好感度 +{fav_increase}（当前 {new_fav}）"
+        )
+
+    def render_people_net(self, people_data: dict[str, dict], unlocked_chars: set[str],
+                           favorability: dict[str, int] | None = None) -> str:
         """人物关系图。
 
         Args:
             people_data: br_story/people_story/people_relationship.json 解析后的数据。
             unlocked_chars: 玩家已解锁的角色 ID 集合。
+            favorability: 玩家与角色的好感度映射。
 
         Returns:
             格式化后的人物关系文本。
@@ -529,7 +609,8 @@ class BackroomsRenderer:
         for cid, info in people_data.items():
             cname = info.get("name", cid)
             if cid in unlocked_chars:
-                lines.append(f"✅ {cname} —— 已解锁")
+                fav = favorability.get(cid, 0) if favorability else 0
+                lines.append(f"✅ {cname} —— 好感度 {fav}")
             else:
                 lines.append(f"❓ ??? —— 尚未遇到")
 
@@ -570,12 +651,21 @@ class BackroomsRenderer:
             "  /br help      — 游戏帮助"
         )
 
-    def render_level399_escape(self, level_count: int) -> str:
+    def render_level399_escape(self, level_count: int, companion: str | None = None) -> str:
         """通关消息。"""
+        companion_text = ""
+        if companion:
+            char_name = {"ankexin": "安可欣", "anjinian": "安继年"}.get(companion, companion)
+            companion_text = (
+                f"\n{char_name} 跟在你身后一起穿过了那扇门。\n"
+                f"在阳光下，你们相视一笑——终于回来了。\n\n"
+            )
+
         return (
             "🎉 你推开了 Level 399 那扇巨大的白色门……\n\n"
             "温暖的光芒吞没了你。当你再次睁开眼睛时，\n"
             "你发现自己躺在 M.E.G.CN 基地的医疗室里。\n\n"
+            f"{companion_text}"
             "══════════════════════════\n"
             "  🎊 恭 喜 通 关 ！ 🎊\n"
             "══════════════════════════\n\n"

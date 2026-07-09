@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from .people_manage import CharacterEncounterService, EncounterResult
+from .people_manage import CharacterEncounterService, EncounterResult, CHARACTERS
 from .shut import ShutManager
 from .state_machine import GameState, GameEvent, GameStateMachine
 from .story_manage import (
@@ -20,6 +20,7 @@ from .story_manage import (
 __all__ = [
     "CharacterEncounterService",
     "EncounterResult",
+    "CHARACTERS",
     "ShutManager",
     "GameState",
     "GameEvent",

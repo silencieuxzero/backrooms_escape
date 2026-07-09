@@ -1,6 +1,6 @@
 """后室:逃出生天 — 角色系统模块
 
-集中管理角色元数据、角色遭遇、礼品发放和任务发放逻辑。
+集中管理角色元数据、角色遭遇、礼品发放、任务发放和好感度逻辑。
 新增角色只需在 ``CHARACTERS`` 注册表中添加一条记录，
 并在 ``br_story/people_story/`` 下创建对应的 ``.txt`` 剧情文件即可。
 """
@@ -53,6 +53,12 @@ class EncounterResult:
     unlocked: bool = False
     """是否为首次解锁（初见）。"""
 
+    favorability_increase: int = 0
+    """本次遭遇增加的好感度数值。"""
+
+    current_favorability: int = 0
+    """增加后的当前好感度。"""
+
 
 # ==================== 遭遇服务 ====================
 
@@ -84,6 +90,7 @@ class CharacterEncounterService:
         people_story_manager: Any,
         quest_manager: Any,
         ankexin_task_chance: float,
+        favorability_per_encounter: int = 10,
     ) -> EncounterResult | None:
         """掷骰判定当前楼层是否发生角色遭遇。
 
@@ -94,6 +101,7 @@ class CharacterEncounterService:
             people_story_manager: ``PeopleStoryManager`` 实例。
             quest_manager: ``QuestManager`` 实例。
             ankexin_task_chance: 安可欣发放任务的概率 (0.0~1.0)。
+            favorability_per_encounter: 每次遭遇增加的好感度。
 
         Returns:
             遭遇结果；未触发时返回 ``None``。
@@ -120,12 +128,12 @@ class CharacterEncounterService:
         if char_id not in unlocked_chars:
             return self._first_encounter(
                 char_id, char_meta, player_state, people_story_manager,
-                quest_manager, ankexin_task_chance,
+                quest_manager, ankexin_task_chance, favorability_per_encounter,
             )
         else:
             return self._routine_encounter(
                 char_id, char_meta, player_state, people_story_manager,
-                quest_manager, ankexin_task_chance,
+                quest_manager, ankexin_task_chance, favorability_per_encounter,
             )
 
     # ── 初见遭遇 ──
@@ -138,6 +146,7 @@ class CharacterEncounterService:
         people_story_manager: Any,
         quest_manager: Any,
         ankexin_task_chance: float,
+        favorability_per_encounter: int = 10,
     ) -> EncounterResult | None:
         story_text = people_story_manager.get_first_story(char_id)
         if not story_text:
@@ -153,8 +162,12 @@ class CharacterEncounterService:
 
         # 标记解锁
         player_state.unlocked_chars.add(char_id)
-        if quest_offer:
-            player_state.pending_quest_offer = quest_offer
+        player_state.pending_quest_offer = quest_offer  # None 时清除旧值
+
+        # 好感度增加
+        old_fav = player_state.favorability.get(char_id, 0)
+        new_fav = old_fav + favorability_per_encounter
+        player_state.favorability[char_id] = new_fav
 
         return EncounterResult(
             char_id=char_id,
@@ -162,6 +175,8 @@ class CharacterEncounterService:
             gift_text=gift_text,
             quest_offer=quest_offer,
             unlocked=True,
+            favorability_increase=favorability_per_encounter,
+            current_favorability=new_fav,
         )
 
     # ── 常规遭遇 ──
@@ -174,6 +189,7 @@ class CharacterEncounterService:
         people_story_manager: Any,
         quest_manager: Any,
         ankexin_task_chance: float,
+        favorability_per_encounter: int = 10,
     ) -> EncounterResult | None:
         story_text = people_story_manager.get_random_routine(char_id)
         if not story_text:
@@ -182,13 +198,19 @@ class CharacterEncounterService:
         quest_offer = self._maybe_offer_quest(
             char_meta, player_state, quest_manager, ankexin_task_chance,
         )
-        if quest_offer:
-            player_state.pending_quest_offer = quest_offer
+        player_state.pending_quest_offer = quest_offer  # None 时清除旧值
+
+        # 好感度增加
+        old_fav = player_state.favorability.get(char_id, 0)
+        new_fav = old_fav + favorability_per_encounter
+        player_state.favorability[char_id] = new_fav
 
         return EncounterResult(
             char_id=char_id,
             story_text=story_text,
             quest_offer=quest_offer,
+            favorability_increase=favorability_per_encounter,
+            current_favorability=new_fav,
         )
 
     # ── 礼品发放 ──
