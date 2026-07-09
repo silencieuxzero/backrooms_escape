@@ -25,6 +25,7 @@
 
 ### 修复
 - 修复 `handle_read` 早期返回签名不匹配：裸 `return` → `return True, "未开始游戏", 1`
+- 修复 `__pycache__` 被 git 跟踪的问题：从索引中移除，确保 `.gitignore` 规则生效
 
 ## v1.0.9 (2026-06-20)
 

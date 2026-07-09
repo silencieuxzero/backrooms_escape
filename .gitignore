@@ -1,0 +1,27 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# ── 玩家存档（运行时自动创建） ──
+br_data/
+
+# ── QQ 机器人运行时（NapCat，包含大量二进制文件） ──
+NapCat.44498.Shell/
+
+# ── 日志文件 ──
+*.log
+beacon_report.log
+
+# ── IDE / 编辑器 ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── 操作系统 ──
+.DS_Store
+Thumbs.db
