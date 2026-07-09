@@ -97,7 +97,7 @@ ICONIC_LEVELS: dict[int, dict[str, Any]] = {
         "description": (
             "你切入了 Level 1。这里的走廊更加宽阔，天花板更高，偶尔能看到一些仓库式的房间。\n"
             "荧光灯的嗡嗡声小了，取而代之的是一种低沉的机械轰鸣。\n"
-            "这里相对安全，是 M.E.G. 建立了 Alpha 基地的地方。"
+            "这里相对安全，是 M.E.G.CN 建立了 Alpha 基地的地方。"
         ),
         "danger": "低",
         "entities": ["偶尔有笑魇在远处游荡，但只要保持灯光就不会有事。"],
@@ -217,7 +217,7 @@ ICONIC_LEVELS: dict[int, dict[str, Any]] = {
         "description": (
             "Level 11 是一座无限蔓延的现代化城市。高楼大厦林立，\n"
             "街道整洁有序，但空无一人。这里是一个相对安全的层级，\n"
-            "M.E.G. 在此设有多个前哨站。但你仍然需要保持警惕。"
+            "M.E.G.CN 在此设有多个前哨站。但你仍然需要保持警惕。"
         ),
         "danger": "低",
         "entities": ["偶尔有笑魇出没"],
@@ -244,7 +244,7 @@ ICONIC_LEVELS: dict[int, dict[str, Any]] = {
 EXPLORE_EVENTS = [
     {"type": "discovery", "text": "你在一堆杂物中发现了一些补给品。", "give_item": True},
     {"type": "discovery", "text": "墙壁上刻着模糊的涂鸦：「走这边！→」——看来之前有人来过。"},
-    {"type": "discovery", "text": "你找到了一个 M.E.G. 遗弃的通讯设备，上面记录了一些关于附近出口的线索。"},
+    {"type": "discovery", "text": "你找到了一个 M.E.G.CN 遗弃的通讯设备，上面记录了一些关于附近出口的线索。"},
     {"type": "danger", "text": "地板突然塌陷了一小块，你差点摔下去！", "health_cost": 5},
     {"type": "danger", "text": "一股刺鼻的气体从通风口涌出，呛得你直咳嗽。", "health_cost": 5},
     {"type": "discovery", "text": "你在一间废弃的办公室里找到了一张手绘地图，标记了附近区域的概况。"},
@@ -253,7 +253,7 @@ EXPLORE_EVENTS = [
     {"type": "neutral", "text": "荧光灯闪烁了几下，然后恢复了正常。空气变得更加凝重了。"},
     {"type": "danger", "text": "你的手不小心碰到了墙壁上的不明黏稠物，皮肤有些刺痛。", "health_cost": 3},
     {"type": "discovery", "text": "你在走廊拐角处发现了一个小型补给箱——运气不错！", "give_item": True},
-    {"type": "discovery", "text": "一张贴在墙上的 M.E.G. 公告：「前方高危区域，请谨慎前行。」"},
+    {"type": "discovery", "text": "一张贴在墙上的 M.E.G.CN 公告：「前方高危区域，请谨慎前行。」"},
     {"type": "neutral", "text": "你在一扇半开的门后面发现了一具已经干枯的遗骸，看来有人曾在这里绝望地等待。"},
     {"type": "discovery", "text": "墙上的涂鸦写着一条线索：「红色的门通向安全的地方。」"},
     {"type": "danger", "text": "一根断裂的管道从天花板上掉下来，险些砸到你！", "health_cost": 8},
@@ -264,7 +264,7 @@ EXPLORE_EVENTS = [
 SHORTCUT_POOL = [
     {"levels_skip": (5, 15), "description": "你发现了一部还能运转的电梯，它带你穿过了多个楼层！"},
     {"levels_skip": (3, 10), "description": "地板突然裂开，你跌入了一个滑道，加速滑过了数个层级……"},
-    {"levels_skip": (2, 8), "description": "你找到了一扇标注着「快速通道」的防火门，M.E.G. 真该多建几个这样的东西。"},
+    {"levels_skip": (2, 8), "description": "你找到了一扇标注着「快速通道」的防火门，M.E.G.CN 真该多建几个这样的东西。"},
     {"levels_skip": (8, 20), "description": "一个神秘的传送门悬浮在半空中，你鼓起勇气走了进去——出来时已经跨越了多个层级。"},
 ]
 

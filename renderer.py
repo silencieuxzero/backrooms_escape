@@ -237,7 +237,7 @@ class BackroomsRenderer:
         elif effect == "light":
             lines.append("🔦 手电筒已装备，将在探索中自动生效（驱散笑魇、+5% 出口发现率）。")
         elif effect == "hint":
-            lines.append("📻 M.E.G. 无线电已启用，将帮助你在楼层中导航（+5% 出口发现率）。")
+            lines.append("📻 M.E.G.CN 无线电已启用，将帮助你在楼层中导航（+5% 出口发现率）。")
         elif effect == "exit_guarantee":
             lines.append("🔑 层级钥匙已使用！下次 /br exit 必能找到出口。")
         else:

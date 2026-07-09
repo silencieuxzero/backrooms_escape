@@ -216,10 +216,10 @@ class GameConfig(PluginConfigBase):
     )
     item_weight_o5: int = Field(
         default=2,
-        description="M.E.G. 无线电获取权重",
+        description="M.E.G.CN 无线电获取权重",
         json_schema_extra={
-            "label": "M.E.G. 无线电权重",
-            "hint": "发现补给品时获得 M.E.G. 无线电的权重，权重越高越常见。",
+            "label": "M.E.G.CN 无线电权重",
+            "hint": "发现补给品时获得 M.E.G.CN 无线电的权重，权重越高越常见。",
             "order": 16,
         },
     )

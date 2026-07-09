@@ -13,7 +13,7 @@
   },
   "M002": {
     "title": "信号搜寻",
-    "description": "安可欣需要你帮忙收集一部还能用的 M.E.G. 无线电（o5），她在维修通讯阵列。",
+    "description": "安可欣需要你帮忙收集一部还能用的 M.E.G.CN 无线电（o5），她在维修通讯阵列。",
     "giver": "ankexin",
     "giver_name": "安可欣",
     "objective_type": "collect_item",
@@ -25,7 +25,7 @@
   },
   "M003": {
     "title": "深层探索",
-    "description": "安可欣希望你能探索到 Level 11（无尽城市），收集那里 M.E.G. 前哨站的情报。",
+    "description": "安可欣希望你能探索到 Level 11（无尽城市），收集那里 M.E.G.CN 前哨站的情报。",
     "giver": "ankexin",
     "giver_name": "安可欣",
     "objective_type": "reach_level",
@@ -33,7 +33,7 @@
     "reward_currency": 150,
     "reward_items": [],
     "reward_text": "150 M.E.G.CN 贡献点",
-    "submit_text": "安可欣正在休息室里喝咖啡，看到你回来，眼睛一亮。\n\n「Level 11！那可是我们 M.E.G. 的重要据点了。你带来的情报很有价值。」\n\n她记录完你的报告后，拍拍你的肩膀。「干得漂亮，探员。继续深入的话，也许我们能一起找到后室的秘密。」"
+    "submit_text": "安可欣正在休息室里喝咖啡，看到你回来，眼睛一亮。\n\n「Level 11！那可是我们 M.E.G.CN 的重要据点了。你带来的情报很有价值。」\n\n她记录完你的报告后，拍拍你的肩膀。「干得漂亮，探员。继续深入的话，也许我们能一起找到后室的秘密。」"
   },
   "M004": {
     "title": "紧急补给",
