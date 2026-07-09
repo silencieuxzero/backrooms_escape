@@ -1,5 +1,27 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.1.0 (2026-07-09)
+
+### 重构
+- 项目结构重组：新建 `renderer_load/` 拓展模块目录，`shut.py`、`story.py` 移入其中
+- `renderer.py` 成为拓展模块的统一加载入口，所有 `renderer_load/` 下的模块通过 `renderer.py` 透出
+- `plugin.py` 不再直接引用 `story` 和 `shut` 模块，改为全部从 `renderer` 导入
+- 新增 `.gitignore`，排除 `__pycache__/`、`br_data/`、`*.log`、IDE 配置等不应进入仓库的文件
+- 新建 `br_story/` 故事集中目录，`level_story/`、`people_story/`、`base_story/` 三个故事文件夹移入其中
+- 废弃 `config_other/` 目录，其中的 `base_work.json` 移至 `br_story/base_story/`、`people_quests.json` 和 `people_relationship.json` 移至 `br_story/people_story/`，相关加载路径同步更新
+- 版本号统一更新至 `1.1.0`
+
+### 新增
+- 引入有限状态机（FSM）：新建 `renderer_load/state_machine.py`，定义 `GameState`（5 个状态）、`GameEvent`（7 个事件）、`GameStateMachine` 类
+
+### 变更
+- `PlayerState.game_started: bool` 替换为 `fsm: GameStateMachine`，状态机管理游戏核心流程而非布尔标志
+- 全部 22 处 `game_started` 引用更新为 `fsm.is_playable()` / `fsm.apply()` 调用
+- 存档字段 `game_started` → `state`，`GameStateMachine.from_dict()` 恢复状态
+
+### 修复
+- 修复 `handle_read` 早期返回签名不匹配：裸 `return` → `return True, "未开始游戏", 1`
+
 ## v1.0.9 (2026-06-20)
 
 ### 新增

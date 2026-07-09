@@ -1,6 +1,8 @@
 """后室:逃出生天 — 消息回复渲染器
 
 将所有消息文本的格式化逻辑从 plugin.py 中抽离，保持游戏逻辑与呈现分离。
+同时作为拓展功能模块的加载入口 —— 所有 ``renderer_load/`` 下的模块
+均由本模块导入并显式透出，上层 (plugin.py) 只需 import 本模块即可。
 """
 
 from __future__ import annotations
@@ -8,6 +10,35 @@ from __future__ import annotations
 from typing import Any
 
 from .config import GameConfig
+
+# ── 透出 renderer_load 中的拓展功能模块 ──
+# 所有 renderer_load/*.py 中的公开类均在此处导入并重新导出，
+# 上层（plugin.py）通过 from .renderer import ... 即可获得全部能力。
+from .renderer_load import (
+    ShutManager,
+    GameState,
+    GameEvent,
+    GameStateMachine,
+    StoryManager,
+    PeopleStoryManager,
+    QuestManager,
+    WorkManager,
+    BaseWorkStoryManager,
+)
+
+__all__ = [
+    "RenderContext",
+    "BackroomsRenderer",
+    "ShutManager",
+    "GameState",
+    "GameEvent",
+    "GameStateMachine",
+    "StoryManager",
+    "PeopleStoryManager",
+    "QuestManager",
+    "WorkManager",
+    "BaseWorkStoryManager",
+]
 
 
 # ==================== 渲染上下文 ====================
@@ -479,7 +510,7 @@ class BackroomsRenderer:
         """人物关系图。
 
         Args:
-            people_data: config_other/people_relationship.json 解析后的数据。
+            people_data: br_story/people_story/people_relationship.json 解析后的数据。
             unlocked_chars: 玩家已解锁的角色 ID 集合。
 
         Returns:

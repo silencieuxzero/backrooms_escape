@@ -17,9 +17,19 @@ from maibot_sdk import Command, HookHandler, MaiBotPlugin
 from maibot_sdk.types import HookMode, HookOrder, ErrorPolicy
 
 from .config import BackroomsGameConfig
-from .story import StoryManager, PeopleStoryManager, QuestManager, WorkManager, BaseWorkStoryManager
-from .renderer import BackroomsRenderer, RenderContext
-from .shut import ShutManager
+from .renderer import (
+    BackroomsRenderer,
+    RenderContext,
+    GameState,
+    GameEvent,
+    GameStateMachine,
+    StoryManager,
+    PeopleStoryManager,
+    QuestManager,
+    WorkManager,
+    BaseWorkStoryManager,
+    ShutManager,
+)
 
 # ==================== 外部数据文件 ====================
 
@@ -56,10 +66,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.0.9"
+PLUGIN_VERSION = "1.1.0"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.0.9"
+SAVE_VERSION = "1.1.0"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -291,7 +301,7 @@ class PlayerState:
     health: int = 100
     sanity: int = 100
     inventory: list[dict] = field(default_factory=list)
-    game_started: bool = False
+    fsm: GameStateMachine = field(default_factory=GameStateMachine)
     exit_attempts: int = 0  # 当前层级尝试找出口的次数
     pending_note: str | None = None  # 待阅读的纸条内容
     unlocked_chars: set[str] = field(default_factory=set)  # 已解锁的角色 ID 集合
@@ -470,8 +480,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     @staticmethod
     def _load_people_net() -> dict[str, dict]:
-        """从 config_other/people_relationship.json 加载人物数据。"""
-        file_path = Path(__file__).parent / "config_other" / "people_relationship.json"
+        """从 br_story/people_story/people_relationship.json 加载人物数据。"""
+        file_path = Path(__file__).parent / "br_story" / "people_story" / "people_relationship.json"
         if not file_path.is_file():
             return {}
         try:
@@ -512,7 +522,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         user_id = str(stream_id)
         player = self._get_player(user_id)
 
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return True, "未开始游戏", 1
 
@@ -1018,7 +1028,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             "health": player.health,
             "sanity": player.sanity,
             "inventory": player.inventory,
-            "game_started": player.game_started,
+            "state": player.fsm.state.value,
             "exit_attempts": player.exit_attempts,
             "pending_note": player.pending_note,
             "unlocked_chars": sorted(player.unlocked_chars),
@@ -1057,7 +1067,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             health=data.get("health", 100),
             sanity=data.get("sanity", 100),
             inventory=data.get("inventory", []),
-            game_started=data.get("game_started", False),
+            fsm=GameStateMachine.from_dict(data),
             exit_attempts=data.get("exit_attempts", 0),
             pending_note=data.get("pending_note"),
             unlocked_chars=set(data.get("unlocked_chars", [])),
@@ -1339,8 +1349,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
             health=self.config.game.initial_health,
             sanity=self.config.game.initial_sanity,
             inventory=[],
-            game_started=True,
         )
+        player.fsm.apply(GameEvent.START)
         self._players[user_id] = player
         self._save_player(user_id)
 
@@ -1355,7 +1365,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """使用背包物品（按编号）。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1395,7 +1405,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """探索当前楼层。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1517,7 +1527,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         # 死亡处理
         if player.health <= 0:
-            player.game_started = False
+            player.fsm.apply(GameEvent.DIE)
             del self._players[user_id]
             self._delete_player_save(user_id)
 
@@ -1532,7 +1542,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """尝试寻找出口。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1649,7 +1659,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
             # 死亡处理
             if player.health <= 0:
-                player.game_started = False
+                player.fsm.apply(GameEvent.DIE)
                 del self._players[user_id]
                 self._delete_player_save(user_id)
 
@@ -1668,7 +1678,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """查看当前状态。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1683,7 +1693,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """查看背包。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1716,7 +1726,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         user_id = str(stream_id)
         player = self._get_player(user_id)
         unlocked: set[str] = set()
-        if player and player.game_started:
+        if player and player.fsm.is_playable():
             unlocked = player.unlocked_chars
         await self._send(
             stream_id,
@@ -1729,7 +1739,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """显示任务面板。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1742,7 +1752,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """接受任务。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1769,7 +1779,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """提交任务。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1821,7 +1831,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """显示已解锁的工作故事列表。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1834,7 +1844,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """通过合并转发消息查看具体故事。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1867,7 +1877,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """显示基地工作面板。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1880,7 +1890,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """开始一个工作。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 
@@ -1905,7 +1915,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """提交工作答案。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
-        if not player or not player.game_started:
+        if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
 

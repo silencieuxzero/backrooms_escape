@@ -125,6 +125,105 @@ adapter 内部流程：
 ]
 ```
 
+## 项目结构
+
+```
+backrooms_escape/
+├── plugin.py                  # 插件主入口 — 游戏逻辑、命令注册、数据持久化
+├── renderer.py                # 消息渲染器 + 拓展模块加载入口
+├── config.py                  # 配置模型（PluginConfigBase 子类）
+│
+├── renderer_load/             # 拓展功能模块目录（所有新 .py 放这里）
+│   ├── __init__.py            #   统一导出
+│   ├── state_machine.py       #   游戏有限状态机（GameStateMachine）
+│   ├── shut.py                #   群聊静默管理器（ShutManager）
+│   └── story.py               #   故事/纸条/任务/工作/人物剧情管理器
+│
+├── br_story/                  # 故事/剧情/数据文本目录
+│   ├── level_story/           #   后室背景故事纸条文本文件
+│   │   └── l1_story.txt ~ l11_story.txt
+│   ├── people_story/          #   NPC 角色剧情 + 任务 + 人物关系数据
+│   │   ├── ankexin.txt
+│   │   ├── anjinian.txt
+│   │   ├── people_quests.json
+│   │   └── people_relationship.json
+│   └── base_story/            #   基地工作解谜 + 解锁故事
+│       ├── base_work.json
+│       └── work_W001_story.txt ~ work_W005_story.txt
+│
+├── config.toml                # 插件配置文件
+├── _manifest.json             # 插件元信息
+├── backrooms_data.json        # 物品/实体数据池
+├── br_data/                   # 玩家存档（运行时自动创建）
+│   └── *.json
+└── .gitignore
+```
+
+### 调用链路
+
+```
+plugin.py
+  │
+  ├── config.py                # 读取用户配置
+  │
+  └── renderer.py (入口)
+        │
+        ├── config.py          # 仅用于 RenderContext 类型引用
+        │
+        └── renderer_load/     # 拓展功能模块
+              ├── state_machine.py  #   GameStateMachine
+              ├── shut.py           #   ShutManager
+              └── story.py          #   StoryManager 等
+```
+
+> 所有新增的功能拓展模块应放置在 `renderer_load/` 目录下，并在 `renderer.py` 中导入并透出。`plugin.py` 无需直接引用 `renderer_load/` 下的任何模块。
+
+## 状态机
+
+插件使用**有限状态机（FSM）** 管理游戏核心流程，定义在 `renderer_load/state_machine.py` 中。
+
+### 状态定义
+
+| 状态 | 含义 | 可执行操作 |
+|------|------|-----------|
+| `NOT_STARTED` | 未开始游戏 | `/br start` |
+| `ALIVE` | 存活探索中（Level 0~398） | 全部命令 |
+| `AT_399` | 到达最终出口 | `/br exit`（触发通关） |
+| `DEAD` | 生命值归零 | `/br start` 重新开始 |
+| `ESCAPED` | 成功逃出后室 | `/br start` 重新开始 |
+
+### 状态转移图
+
+```
+NOT_STARTED ──start──▶ ALIVE ──reach_399──▶ AT_399 ──exit_399──▶ ESCAPED
+                         │                                              │
+                         │ die                                           │ restart
+                         ▼                                              │
+                       DEAD ◀────────────────────────────────────────────┘
+                         │
+                         └── restart ──▶ ALIVE
+```
+
+ALIVE 状态下 `explore`、`exit`、`use_item` 等事件不会改变状态，但可能触发 `die`（生命归零）或 `reach_399`（到达 Level 399）进入新状态。
+
+### 在 PlayerState 中使用
+
+```python
+from dataclasses import dataclass, field
+from .renderer import GameStateMachine
+
+@dataclass
+class PlayerState:
+    fsm: GameStateMachine = field(default_factory=GameStateMachine)
+    # ... 其他字段
+
+# 守卫检查（替代旧的 game_started 判断）
+if not player.fsm.is_playable():
+    # 拒绝操作
+```
+
+> 状态机将游戏流程显式化为一张可读的转移表，非法操作自然被拦截，不再需要散落在各命令处理器中的 `if game_started` 隐式状态判断。
+
 ## 游戏机制
 
 ### 核心属性
@@ -486,11 +585,11 @@ user_ids = ["444555666"]
 
 ### 工作故事
 
-每个工作完成后会解锁一段故事文本。故事文件位于 `base_story/` 目录下，使用 `===STORY_XXX===` 分隔符，格式与 `level_story/` 中的纸条文件相同。
+每个工作完成后会解锁一段故事文本。故事文件位于 `br_story/base_story/` 目录下，使用 `===STORY_XXX===` 分隔符，格式与 `br_story/level_story/` 中的纸条文件相同。
 
 ```
 backrooms_escape/
-├── base_story/
+├── br_story/base_story/
 │   ├── work_W001_story.txt      ← 坐标校准工作故事（占位符）
 │   ├── work_W002_story.txt      ← 气候识别工作故事（占位符）
 │   ├── work_W003_story.txt      ← 时区推算工作故事（占位符）
@@ -500,7 +599,7 @@ backrooms_escape/
 
 ## 人物关系图
 
-`/br people_net` 命令查看已解锁角色的人物关系图。数据来源为 `config_other/people_relationship.json`。
+`/br people_net` 命令查看已解锁角色的人物关系图。数据来源为 `br_story/people_story/people_relationship.json`。
 
 - 仅已解锁的角色会显示完整信息
 - 未解锁的角色显示为 `❓ ???`
@@ -508,8 +607,8 @@ backrooms_escape/
 
 ### 如何新增角色
 
-1. 在 `people_story/` 下新建 `.txt` 文件，使用 `===CHARACTER_NNN===` 分隔剧情片段
-2. 在 `config_other/people_relationship.json` 中添加该角色的数据条目
+1. 在 `br_story/people_story/` 下新建 `.txt` 文件，使用 `===CHARACTER_NNN===` 分隔剧情片段
+2. 在 `br_story/people_story/people_relationship.json` 中添加该角色的数据条目
 3. 在 `plugin.py` 的 `_do_explore` 中该角色出现的楼层区域添加触发逻辑
 4. 重载插件生效
 
@@ -519,21 +618,24 @@ backrooms_escape/
 
 ```
 backrooms_escape/
-├── level_story/
-│   └── l1_story.txt ~ l11_story.txt  ← 故事纸条
-├── base_story/
-│   └── work_W001_story.txt ~ W005    ← 基地工作故事
-├── people_story/
-│   ├── ankexin.txt                   ← 安可欣剧情
-│   └── anjinian.txt                  ← 安继年剧情
-├── config_other/
-│   ├── people_relationship.json      ← 人物关系数据
-│   ├── people_quests.json            ← 任务数据
-│   └── base_work.json                ← 基地工作解谜数据
-├── backrooms_data.json               ← 物品/实体数据
+├── br_story/
+│   ├── level_story/
+│   │   └── l1_story.txt ~ l11_story.txt  ← 故事纸条
+│   ├── base_story/
+│   │   ├── base_work.json                ← 基地工作解谜数据
+│   │   └── work_W001_story.txt ~ W005    ← 基地工作故事
+│   └── people_story/
+│       ├── ankexin.txt                   ← 安可欣剧情
+│       ├── anjinian.txt                  ← 安继年剧情
+│       ├── people_quests.json            ← 任务数据
+│       └── people_relationship.json      ← 人物关系数据
+├── backrooms_data.json                   ← 物品/实体数据
 ├── plugin.py
-├── story.py                          ← 故事/任务/工作加载逻辑
-├── renderer.py
+├── renderer.py                           ← 渲染器 + 拓展模块加载入口
+├── renderer_load/
+│   ├── state_machine.py                  ← 游戏有限状态机
+│   ├── shut.py                           ← 群聊静默管理
+│   └── story.py                          ← 故事/任务/工作/人物剧情加载
 ├── config.py
 └── config.toml
 ```
@@ -569,7 +671,7 @@ backrooms_escape/
 不需要转义，直接写中文即可。
 ```
 
-也可以新建一个 `l12_story.txt`（或任意匹配 `l*_story.txt` 模式的文件）放入 `level_story/` 目录，插件重载后会自动加载。
+也可以新建一个 `l12_story.txt`（或任意匹配 `l*_story.txt` 模式的文件）放入 `br_story/level_story/` 目录，插件重载后会自动加载。
 
 ### 如何修改现有故事
 
@@ -593,14 +695,13 @@ backrooms_escape/
 
 ### 自定义角色剧情文件
 
-角色剧情文件位于 `people_story/` 目录，每个 `.txt` 文件代表一个角色，文件名作为角色 ID。
+角色剧情文件位于 `br_story/people_story/` 目录，每个 `.txt` 文件代表一个角色，文件名作为角色 ID。
 
 ```
 backrooms_escape/
-├── people_story/
-│   ├── ankexin.txt       ← 安可欣（信息分析组探员，7段剧情）
-│   └── anjinian.txt      ← 安继年（工程部技师，7段剧情）
-├── config_other/
+├── br_story/people_story/
+│   ├── ankexin.txt             ← 安可欣（信息分析组探员，7段剧情）
+│   ├── anjinian.txt            ← 安继年（工程部技师，7段剧情）
 │   └── people_relationship.json  ← 人物关系配置文件（JSON 格式）
 └── ...
 ```
@@ -657,9 +758,9 @@ backrooms_escape/
       "description": "后室中最常见的补给品…"
     }
   ],
-  "game_started": true,
   "exit_attempts": 2,
   "pending_note": null,
+  "state": "ALIVE",
   "unlocked_chars": ["ankexin"],
   "currency": 85,
   "active_quests": ["M001"],
@@ -678,7 +779,7 @@ backrooms_escape/
 | `health` | int | 当前生命值 |
 | `sanity` | int | 当前理智值 |
 | `inventory` | array | 背包物品列表 |
-| `game_started` | bool | 游戏是否进行中 |
+| `state` | string | 游戏状态：`"NOT_STARTED"` / `"ALIVE"` / `"AT_399"` / `"DEAD"` / `"ESCAPED"` |
 | `exit_attempts` | int | 当前楼层寻找出口的累计次数 |
 | `pending_note` | string\|null | 待阅读的纸条内容，无则为 null |
 | `unlocked_chars` | array | 已解锁的角色 ID 列表 |

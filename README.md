@@ -4,9 +4,9 @@
 
 本插件基于 MaiBot SDK + NapCat 适配器运行。本项目的代码基于 MIT 协议开源。
 
-本插件未在snowluma上测试，可能在该适配器下运行异常。若要使用本插件，请尽量使用napcat适配器。
+本插件未对snowluma进行适配，可能在该适配器下运行异常。若要使用本插件，请尽量使用napcat适配器。
 
-由于作者水平有限，故使用了deepseek进行辅助开发，因而本插件的bug较多，但作者会尽快修复，当前还处于测试版本，请及时更新。
+由于作者水平有限，故使用了DeepSeek进行辅助开发，因而本插件的bug较多，但作者会尽快修复，当前还处于测试版本，请及时更新。
 
 本插件较为复杂，且玩法较多，因此README文件仅包含核心功能说明。若想查看完整版README文件，请参考 `webreadme.md`。
 
@@ -123,3 +123,125 @@ user_ids = ["你的QQ号"]
 ## 自定义故事
 
 探索时可捡到背景故事纸条，也可在 Level 1 遇到 NPC 角色（首次赠送 2 瓶杏仁水）。编辑 `l1_story.txt` 即可自定义内容。格式为 `===STORY_NNN===` 分隔的 UTF-8 文本段，修改后重载插件生效。
+
+## 项目结构
+
+```
+backrooms_escape/
+├── plugin.py                  # 插件主入口 — 游戏逻辑、命令注册、数据持久化
+├── renderer.py                # 消息渲染器 — 格式化所有回复文本 + 加载拓展模块的入口
+├── config.py                  # 配置模型 — PluginConfigBase 子类，定义所有可配字段
+│
+├── renderer_load/             # 拓展功能模块目录（所有新 .py 文件放这里）
+│   ├── __init__.py            #   统一导出
+│   ├── shut.py                #   群聊静默管理器（ShutManager）
+│   └── story.py               #   故事/纸条/任务/工作/人物剧情管理器
+│                              #   （StoryManager, PeopleStoryManager,
+│                              #    QuestManager, WorkManager, BaseWorkStoryManager）
+│
+├── config.toml                # 插件配置文件（启动时自动读取）
+├── _manifest.json             # 插件元信息（ID、版本、兼容性声明）
+├── backrooms_data.json        # 物品/实体数据池
+│
+├── br_story/                  # 故事/剧情文本目录
+│   ├── level_story/           #   后室背景故事纸条文本文件
+│   │   ├── l1_story.txt
+│   │   ├── l2_story.txt
+│   │   └── ...
+│   ├── people_story/          #   NPC 角色剧情 + 任务 + 人物关系数据
+│   │   ├── ankexin.txt
+│   │   ├── anjinian.txt
+│   │   ├── people_quests.json
+│   │   └── people_relationship.json
+│   └── base_story/            #   基地工作解谜 + 解锁故事文本
+│       ├── work_W001_story.txt
+│       └── base_work.json
+│
+└── br_data/                   # 玩家存档目录（自动创建，每个玩家一个 .json 文件）
+    └── *.json
+```
+
+### 调用链路
+
+```
+plugin.py
+  │
+  ├── config.py                # 读取用户配置
+  │
+  └── renderer.py (入口)
+        │
+        ├── config.py          # 仅用于 RenderContext 类型引用
+        │
+        └── renderer_load/     # 拓展功能模块
+              ├── state_machine.py  #   GameStateMachine
+              ├── shut.py           #   ShutManager
+              └── story.py          #   StoryManager, PeopleStoryManager,
+                                     #   QuestManager, WorkManager, BaseWorkStoryManager
+```
+
+> 所有新增的功能拓展模块应放置在 `renderer_load/` 目录下，并在 `renderer.py` 中导入并透出。`plugin.py` 无需直接引用 `renderer_load/` 下的任何模块。
+
+## 状态机
+
+插件使用**有限状态机（FSM）** 管理游戏核心流程，定义在 [renderer_load/state_machine.py](file:///e:/yuzhu_backrooms/backrooms_escape/renderer_load/state_machine.py) 中。
+
+### 状态定义
+
+| 状态 | 含义 | 可执行操作 |
+|------|------|-----------|
+| `NOT_STARTED` | 未开始游戏 | `/br start` |
+| `ALIVE` | 存活探索中（Level 0~398） | 全部命令 |
+| `AT_399` | 到达最终出口 | `/br exit`（触发通关） |
+| `DEAD` | 生命值归零 | `/br start` 重新开始 |
+| `ESCAPED` | 成功逃出后室 | `/br start` 重新开始 |
+
+### 状态转移图
+
+```
+NOT_STARTED ──start──▶ ALIVE ──reach_399──▶ AT_399 ──exit_399──▶ ESCAPED
+                         │                                              │
+                         │ die                                           │ restart
+                         ▼                                              │
+                       DEAD ◀────────────────────────────────────────────┘
+                         │
+                         └── restart ──▶ ALIVE
+```
+
+ALIVE 状态下 `explore`、`exit`、`use_item` 等事件不会改变状态，但可能触发 `die`（生命归零时）或 `reach_399`（到达 Level 399 时）进入新状态。
+
+### 代码使用
+
+```python
+from .renderer import GameState, GameEvent, GameStateMachine
+
+# 创建状态机
+fsm = GameStateMachine()  # 初始为 NOT_STARTED
+
+# 查询
+fsm.is_playable()    # True/False — 当前能否执行游戏操作
+fsm.can(GameEvent.EXPLORE)   # True/False — 特定事件是否允许
+fsm.state            # 当前状态 (GameState 枚举)
+
+# 转移
+fsm.apply(GameEvent.START)   # NOT_STARTED → ALIVE
+fsm.apply(GameEvent.DIE)     # ALIVE → DEAD
+
+# 序列化
+data = fsm.to_dict()              # → {"state": "ALIVE"}
+fsm2 = GameStateMachine.from_dict(data)  # 从存档恢复
+```
+
+### 在 PlayerState 中使用
+
+```python
+@dataclass
+class PlayerState:
+    fsm: GameStateMachine = field(default_factory=GameStateMachine)
+    # ... 其他字段
+
+# 守卫检查（替代旧的 game_started 判断）
+if not player.fsm.is_playable():
+    # 拒绝操作
+```
+
+> 状态机消除了散落在各命令处理器中的 `if game_started` 隐式状态判断，将游戏流程显式化为一张可读的转移表，非法操作自然被拦截，不再需要手写 `if-else`。

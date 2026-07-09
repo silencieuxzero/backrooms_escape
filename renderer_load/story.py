@@ -16,7 +16,7 @@ from typing import Optional
 class QuestManager:
     """任务管理器。
 
-    从 config_other/people_quests.json 加载任务定义。
+    从 br_story/people_story/people_quests.json 加载任务定义。
     """
 
     def __init__(self, items_pool: list[dict]) -> None:
@@ -25,7 +25,7 @@ class QuestManager:
         self._load()
 
     def _load(self) -> None:
-        base_dir = Path(__file__).parent / "config_other"
+        base_dir = Path(__file__).parent.parent / "br_story" / "people_story"
         fp = base_dir / "people_quests.json"
         if not fp.is_file():
             return
@@ -85,7 +85,7 @@ class QuestManager:
 class WorkManager:
     """基地工作管理器。
 
-    从 config_other/base_work.json 加载解谜工作任务。
+    从 br_story/base_story/base_work.json 加载解谜工作任务。
     """
 
     def __init__(self) -> None:
@@ -93,7 +93,7 @@ class WorkManager:
         self._load()
 
     def _load(self) -> None:
-        base_dir = Path(__file__).parent / "config_other"
+        base_dir = Path(__file__).parent.parent / "br_story" / "base_story"
         fp = base_dir / "base_work.json"
         if not fp.is_file():
             return
@@ -144,7 +144,7 @@ class PeopleStoryManager:
 
     def _load_all(self) -> None:
         """自动发现并加载 people_story/ 下所有 .txt 文件。"""
-        base_dir = Path(__file__).parent / "people_story"
+        base_dir = Path(__file__).parent.parent / "br_story" / "people_story"
         if not base_dir.is_dir():
             return
         story_files = sorted(base_dir.glob("*.txt"))
@@ -240,7 +240,7 @@ class StoryManager:
 
     def _load_all(self) -> None:
         """自动发现并加载所有 l*_story.txt 文件。"""
-        base_dir = Path(__file__).parent / "level_story"
+        base_dir = Path(__file__).parent.parent / "level_story"
         if not base_dir.is_dir():
             return
         story_files = sorted(base_dir.glob("l*_story.txt"))
@@ -300,7 +300,7 @@ class BaseWorkStoryManager:
         self._load_all()
 
     def _load_all(self) -> None:
-        base_dir = Path(__file__).parent / "base_story"
+        base_dir = Path(__file__).parent.parent / "br_story" / "base_story"
         if not base_dir.is_dir():
             return
         for file_path in sorted(base_dir.glob("*.txt")):
