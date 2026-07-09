@@ -15,6 +15,8 @@ from .config import GameConfig
 # 所有 renderer_load/*.py 中的公开类均在此处导入并重新导出，
 # 上层（plugin.py）通过 from .renderer import ... 即可获得全部能力。
 from .renderer_load import (
+    CharacterEncounterService,
+    EncounterResult,
     ShutManager,
     GameState,
     GameEvent,
@@ -29,6 +31,8 @@ from .renderer_load import (
 __all__ = [
     "RenderContext",
     "BackroomsRenderer",
+    "CharacterEncounterService",
+    "EncounterResult",
     "ShutManager",
     "GameState",
     "GameEvent",

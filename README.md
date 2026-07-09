@@ -135,7 +135,8 @@ backrooms_escape/
 ├── renderer_load/             # 拓展功能模块目录（所有新 .py 文件放这里）
 │   ├── __init__.py            #   统一导出
 │   ├── shut.py                #   群聊静默管理器（ShutManager）
-│   └── story.py               #   故事/纸条/任务/工作/人物剧情管理器
+│   ├── story_manage.py         #   故事/纸条/任务/工作/人物剧情管理器
+│   └── people_manage.py        #   角色系统（注册表 + 遭遇服务）
 │                              #   （StoryManager, PeopleStoryManager,
 │                              #    QuestManager, WorkManager, BaseWorkStoryManager）
 │
@@ -175,7 +176,8 @@ plugin.py
         └── renderer_load/     # 拓展功能模块
               ├── state_machine.py  #   GameStateMachine
               ├── shut.py           #   ShutManager
-              └── story.py          #   StoryManager, PeopleStoryManager,
+              ├── story_manage.py  #   StoryManager 等
+              └── people_manage.py #   CharacterEncounterService
                                      #   QuestManager, WorkManager, BaseWorkStoryManager
 ```
 

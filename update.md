@@ -3,9 +3,9 @@
 ## v1.1.0 (2026-07-09)
 
 ### 重构
-- 项目结构重组：新建 `renderer_load/` 拓展模块目录，`shut.py`、`story.py` 移入其中
+- 项目结构重组：新建 `renderer_load/` 拓展模块目录，`shut.py`、`story_manage.py`、`people_manage.py` 等拓展模块移入其中
 - `renderer.py` 成为拓展模块的统一加载入口，所有 `renderer_load/` 下的模块通过 `renderer.py` 透出
-- `plugin.py` 不再直接引用 `story` 和 `shut` 模块，改为全部从 `renderer` 导入
+- `plugin.py` 不再直接引用 `story_manage` 和 `shut` 模块，改为全部从 `renderer` 导入
 - 新增 `.gitignore`，排除 `__pycache__/`、`br_data/`、`*.log`、IDE 配置等不应进入仓库的文件
 - 新建 `br_story/` 故事集中目录，`level_story/`、`people_story/`、`base_story/` 三个故事文件夹移入其中
 - 废弃 `config_other/` 目录，其中的 `base_work.json` 移至 `br_story/base_story/`、`people_quests.json` 和 `people_relationship.json` 移至 `br_story/people_story/`，相关加载路径同步更新
@@ -13,11 +13,15 @@
 
 ### 新增
 - 引入有限状态机（FSM）：新建 `renderer_load/state_machine.py`，定义 `GameState`（5 个状态）、`GameEvent`（7 个事件）、`GameStateMachine` 类
+- 角色系统模块化：新建 `renderer_load/people_manage.py`，包含 `Character` 注册表 + `CharacterEncounterService`
+- `renderer_load/people.py` → `people_manage.py`，`renderer_load/story.py` → `story_manage.py`，模块名统一加 `_manage` 后缀
 
 ### 变更
 - `PlayerState.game_started: bool` 替换为 `fsm: GameStateMachine`，状态机管理游戏核心流程而非布尔标志
 - 全部 22 处 `game_started` 引用更新为 `fsm.is_playable()` / `fsm.apply()` 调用
 - 存档字段 `game_started` → `state`，`GameStateMachine.from_dict()` 恢复状态
+- 角色遭遇逻辑从 `plugin.py._do_explore` 中抽离至 `CharacterEncounterService`，消除重复的杏仁水硬编码和角色 ID 硬编码；新增角色只需在 `CHARACTERS` 注册表中添加记录 + 创建剧情文件
+- 移除 `_maybe_ankexin_task` 方法（功能已合并到 `CharacterEncounterService`）
 
 ### 修复
 - 修复 `handle_read` 早期返回签名不匹配：裸 `return` → `return True, "未开始游戏", 1`

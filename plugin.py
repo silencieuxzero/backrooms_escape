@@ -23,6 +23,7 @@ from .renderer import (
     GameState,
     GameEvent,
     GameStateMachine,
+    CharacterEncounterService,
     StoryManager,
     PeopleStoryManager,
     QuestManager,
@@ -330,6 +331,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._quest_manager = QuestManager(ITEMS_POOL)
         self._work_manager = WorkManager()
         self._work_story_manager = BaseWorkStoryManager()
+        self._char_encounter_service = CharacterEncounterService(ITEMS_POOL)
         self._renderer = BackroomsRenderer()
         self._plugin_disabled: bool = False
         self._admin_ids: set[str] = set()
@@ -1315,19 +1317,6 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         return crate_size, items
 
-    def _maybe_ankexin_task(self, player: PlayerState) -> str | None:
-        """按配置概率决定安可欣是否发放任务。返回任务 ID 或 None。"""
-        if random.random() >= self.config.game.ankexin_task_chance:
-            return None
-        available = self._quest_manager.get_available_quests(
-            player.active_quests, player.completed_quests,
-        )
-        if not available:
-            return None
-        quest_offer = random.choice(available)
-        player.pending_quest_offer = quest_offer
-        return quest_offer
-
     def _format_inventory(self, player: PlayerState) -> str:
         """格式化背包内容。"""
         if not player.inventory:
@@ -1470,39 +1459,22 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 entity_encounter = (entity_name, entity_data, edamage)
 
         # Level 1 特殊：在 M.E.G.CN Alpha 基地遇到角色
-        #   初见（未解锁）→ 触发初见剧情 + 礼物；再次遇到（已解锁）→ 触发常规剧情
-        #   遇到安可欣时按 ankexin_task_chance 概率决定是否发放任务
+        # 由 CharacterEncounterService 统一处理角色选择、初见/常规判断、
+        # 礼品发放和任务发放。新增角色只需在 CHARACTERS 注册表中添加。
         char_encounter: tuple[str, str, str | None, str | None] | None = None
-        if player.current_level == 1:
-            # 筛选可遇角色：有初见剧情的角色
-            all_chars = [cid for cid in ("ankexin", "anjinian")
-                         if self._people_manager.get_first_story(cid) is not None]
-
-            if all_chars and random.random() < 0.40:
-                char_id = random.choice(all_chars)
-
-                if char_id not in player.unlocked_chars:
-                    # ── 初见：初见剧情 + 礼物 ──
-                    story_text = self._people_manager.get_first_story(char_id)
-                    if story_text:
-                        # 赠送 2 瓶杏仁水作为见面礼
-                        almond_water = {"name": "o1", "type": "consumable", "effect": "sanity_restore", "value": 30,
-                                        "display_name": "杏仁水",
-                                        "description": "后室中最常见的补给品，喝下可以恢复理智，味道像融化的杏仁冰淇淋。"}
-                        player.inventory.append(dict(almond_water))
-                        player.inventory.append(dict(almond_water))
-                        char_gift = "🎁 对方给了你 2 瓶杏仁水作为见面礼。"
-                        # 按概率决定安可欣是否发放任务
-                        quest_offer = self._maybe_ankexin_task(player) if char_id == "ankexin" else None
-                        char_encounter = (char_id, story_text, char_gift, quest_offer)
-                        player.unlocked_chars.add(char_id)
-                else:
-                    # ── 已解锁：触发常规剧情（打招呼等） ──
-                    routine_text = self._people_manager.get_random_routine(char_id)
-                    if routine_text:
-                        # 按概率决定安可欣是否发放任务
-                        quest_offer = self._maybe_ankexin_task(player) if char_id == "ankexin" else None
-                        char_encounter = (char_id, routine_text, None, quest_offer)
+        result = self._char_encounter_service.roll_encounter(
+            level=player.current_level,
+            unlocked_chars=player.unlocked_chars,
+            player_state=player,
+            people_story_manager=self._people_manager,
+            quest_manager=self._quest_manager,
+            ankexin_task_chance=cfg.ankexin_task_chance,
+        )
+        if result is not None:
+            char_encounter = (
+                result.char_id, result.story_text,
+                result.gift_text, result.quest_offer,
+            )
 
         # 理智值过低效果
         if player.sanity <= 0:

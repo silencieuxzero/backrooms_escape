@@ -127,54 +127,106 @@ adapter 内部流程：
 
 ## 项目结构
 
+### 目录树
+
 ```
 backrooms_escape/
-├── plugin.py                  # 插件主入口 — 游戏逻辑、命令注册、数据持久化
+│
+├── plugin.py                  # 插件主入口
+│                              游戏逻辑、命令注册、数据持久化
+│
 ├── renderer.py                # 消息渲染器 + 拓展模块加载入口
-├── config.py                  # 配置模型（PluginConfigBase 子类）
+│                              格式化所有回复文本；从 renderer_load/ 导入并透出所有拓展类
 │
-├── renderer_load/             # 拓展功能模块目录（所有新 .py 放这里）
-│   ├── __init__.py            #   统一导出
-│   ├── state_machine.py       #   游戏有限状态机（GameStateMachine）
-│   ├── shut.py                #   群聊静默管理器（ShutManager）
-│   └── story.py               #   故事/纸条/任务/工作/人物剧情管理器
+├── config.py                  # 配置模型
+│                              PluginConfigBase 子类，定义 [plugin]/[game]/[whitelist]/[blacklist]
 │
-├── br_story/                  # 故事/剧情/数据文本目录
-│   ├── level_story/           #   后室背景故事纸条文本文件
+├── renderer_load/             # 拓展功能模块目录
+│   ├── __init__.py            # 统一导出（上层只需 import renderer_load 即可）
+│   ├── state_machine.py       # 有限状态机 — GameState / GameEvent / GameStateMachine
+│   ├── shut.py                # 群聊静默管理 — ShutManager
+│   ├── story_manage.py        # 数据加载层 — StoryManager / PeopleStoryManager /
+│   │                          #               QuestManager / WorkManager / BaseWorkStoryManager
+│   └── people_manage.py       # 角色业务层 — CharacterEncounterService / CHARACTERS 注册表
+│
+├── br_story/                  # 故事/剧情/数据目录
+│   ├── level_story/           # 后室背景故事纸条文本
 │   │   └── l1_story.txt ~ l11_story.txt
-│   ├── people_story/          #   NPC 角色剧情 + 任务 + 人物关系数据
+│   ├── people_story/          # NPC 角色剧情 + 任务数据 + 人物关系数据
 │   │   ├── ankexin.txt
 │   │   ├── anjinian.txt
 │   │   ├── people_quests.json
 │   │   └── people_relationship.json
-│   └── base_story/            #   基地工作解谜 + 解锁故事
+│   └── base_story/            # 基地工作解谜数据 + 解锁故事
 │       ├── base_work.json
 │       └── work_W001_story.txt ~ work_W005_story.txt
 │
-├── config.toml                # 插件配置文件
-├── _manifest.json             # 插件元信息
+├── config.toml                # 插件配置文件（启动时自动读取）
+├── _manifest.json             # 插件元信息（ID、版本、兼容性声明）
 ├── backrooms_data.json        # 物品/实体数据池
 ├── br_data/                   # 玩家存档（运行时自动创建）
 │   └── *.json
 └── .gitignore
 ```
 
-### 调用链路
+### 分层设计
 
 ```
-plugin.py
-  │
-  ├── config.py                # 读取用户配置
-  │
-  └── renderer.py (入口)
-        │
-        ├── config.py          # 仅用于 RenderContext 类型引用
-        │
-        └── renderer_load/     # 拓展功能模块
-              ├── state_machine.py  #   GameStateMachine
-              ├── shut.py           #   ShutManager
-              └── story.py          #   StoryManager 等
+┌─────────────────────────────────────────────────────┐
+│                   plugin.py                          │
+│   命令路由 + 状态管理 + 存档读写 + 游戏流程编排         │
+│   依赖: renderer, config                             │
+└─────────────────────────┬───────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────┐
+│                   renderer.py                        │
+│   消息格式化 + 拓展模块统一加载入口                     │
+│   从 renderer_load/ 导入并透出所有类                   │
+└─────────────────────────┬───────────────────────────┘
+                          │
+          ┌───────────────┼───────────────┐
+          ▼               ▼               ▼
+┌─────────────────┐ ┌──────────┐ ┌──────────────────┐
+│  renderer_load/  │ │ config   │ │ renderer_load/   │
+│  state_machine   │ │          │ │ shut             │
+│  (FSM)           │ └──────────┘ │ (群聊静默)        │
+└─────────────────┘              └──────────────────┘
+                                  ┌──────────────────┐
+                                  │ renderer_load/   │
+                                  │ story_manage     │
+                                  │ (数据加载层)       │
+                                  │  .StoryManager    │
+                                  │  .PeopleStoryMgmt │
+                                  │  .QuestManager    │
+                                  │  .WorkManager     │
+                                  │  .BaseWorkStory   │
+                                  └────────┬─────────┘
+                                           │ 调用获取数据
+                                           ▼
+                                  ┌──────────────────┐
+                                  │ renderer_load/   │
+                                  │ people_manage    │
+                                  │ (角色业务层)       │
+                                  │  .CHARACTERS      │
+                                  │  .EncounterService│
+                                  └──────────────────┘
 ```
+
+### 数据流
+
+```
+用户命令 → plugin.py (命令处理)
+            │
+            ├──→ renderer.xxx()       ← 格式化回复消息
+            ├──→ fsm.apply(event)     ← 状态转移
+            ├──→ story_manage.xxx()   ← 读取故事/任务/工作数据
+            ├──→ people_manage.xxx()  ← 角色遭遇/礼品/任务发放
+            ├──→ _save_player()       ← 持久化存档
+            └──→ _send()              ← 发送回复
+```
+
+### 约定
 
 > 所有新增的功能拓展模块应放置在 `renderer_load/` 目录下，并在 `renderer.py` 中导入并透出。`plugin.py` 无需直接引用 `renderer_load/` 下的任何模块。
 
@@ -635,7 +687,8 @@ backrooms_escape/
 ├── renderer_load/
 │   ├── state_machine.py                  ← 游戏有限状态机
 │   ├── shut.py                           ← 群聊静默管理
-│   └── story.py                          ← 故事/任务/工作/人物剧情加载
+│   ├── story_manage.py                   ← 故事/任务/工作/人物剧情加载
+│   └── people_manage.py                  ← 角色系统（注册表 + 遭遇服务）
 ├── config.py
 └── config.toml
 ```
