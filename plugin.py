@@ -21,7 +21,6 @@ from .config import BackroomsGameConfig
 from .renderer import (
     BackroomsRenderer,
     RenderContext,
-    GameState,
     GameEvent,
     GameStateMachine,
     CHARACTERS,
@@ -30,8 +29,6 @@ from .renderer import (
     build_message_list,
     trim_history,
     is_end_dialog,
-    MAX_HISTORY_ROUNDS,
-    END_DIALOG_KEYWORDS,
     StoryManager,
     PeopleStoryManager,
     QuestManager,
@@ -45,24 +42,23 @@ from .renderer import (
 _BACKROOMS_DATA_PATH = Path(__file__).parent / "renderer_load" / "backrooms_data.json"
 """插件目录下的物品/实体数据文件路径。"""
 
-_backrooms_data: dict = {}
 ITEMS_POOL: list[dict] = []
 ENTITIES: dict[str, dict] = {}
 
 
 def _load_backrooms_data() -> None:
     """加载 backrooms_data.json 到模块全局变量。"""
-    global _backrooms_data, ITEMS_POOL, ENTITIES
+    global ITEMS_POOL, ENTITIES
     fp = _BACKROOMS_DATA_PATH
     if not fp.is_file():
         raise FileNotFoundError(f"缺少数据文件: {fp}，请确保 backrooms_data.json 存在于插件根目录。")
     try:
-        _backrooms_data = json.loads(fp.read_text(encoding="utf-8"))
+        data = json.loads(fp.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         raise RuntimeError(f"读取 backrooms_data.json 失败: {exc}") from exc
 
-    ITEMS_POOL = _backrooms_data.get("items", [])
-    ENTITIES = _backrooms_data.get("entities", {})
+    ITEMS_POOL = data.get("items", [])
+    ENTITIES = data.get("entities", {})
     if not ITEMS_POOL:
         raise RuntimeError("backrooms_data.json 中缺少 items 数据")
     if not ENTITIES:
@@ -75,10 +71,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.1.2"
+PLUGIN_VERSION = "1.1.3"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.1.2"
+SAVE_VERSION = "1.1.3"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -367,6 +363,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._work_story_manager = BaseWorkStoryManager()
         self._char_encounter_service = CharacterEncounterService(ITEMS_POOL)
         self._people_relationship_data = self._load_people_net()
+        self._people_net_text = self._people_relationship_data  # 指向同一份数据，避免重复加载
         self._renderer = BackroomsRenderer()
         self._plugin_disabled: bool = False
         self._admin_ids: set[str] = set()
@@ -383,9 +380,6 @@ class BackroomsGamePlugin(MaiBotPlugin):
             len(self._shut_manager.list_shut()),
             self._shut_manager.list_shut() or "无",
         )
-
-        # 加载人物关系文件
-        self._people_net_text = self._load_people_net()
 
         # 从配置读取管理员 ID 列表（只能通过修改配置文件来增减）
         self._admin_ids = set(
@@ -565,7 +559,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         pattern=r"^/br\s+read$",
     )
     async def handle_read(self, **kwargs: Any):
-        """阅读检到的纸条。"""
+        """阅读捡到的纸条。"""
         stream_id = kwargs.get("stream_id", "")
         user_id = str(stream_id)
         player = self._get_player(user_id)
@@ -1749,10 +1743,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             await self._send(stream_id, "⚠️ 你不在 Alpha 基地，无法使用基地探索命令。")
             return
 
-        if player.current_level == 399:
-            await self._send(stream_id, self._renderer.render_already_at_399())
-            return
-
+        # 注：此处不需要检查 current_level == 399，因为 399 ≠ 1，前面的守卫已经拦截了所有非 Level 1 的情况
         cfg = self.config.game
         # 基地探索只消耗 1 点理智（比常规探索安全）
         player.sanity = max(0, player.sanity - 1)
@@ -2317,7 +2308,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         elif char_name in name_to_id:
             char_id = name_to_id[char_name]
         else:
-            await self._send(stream_id, f"❌ 不认识「{char_name}」，可邀请的角色：安可欣、安继年、白宇、Luna、洛疏律")
+            await self._send(stream_id, f"❌ 不认识「{char_name}」，可邀请的角色：安可欣、安继年、白宇、Luna、洛疏律、夏终")
             return
 
         char_meta = CHARACTERS.get(char_id)
@@ -2407,7 +2398,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         elif char_input in name_to_id:
             char_id = name_to_id[char_input]
         else:
-            await self._send(stream_id, f"❌ 不认识「{char_input}」，可对话的角色：安可欣、安继年、白宇、Luna、洛疏律")
+            await self._send(stream_id, f"❌ 不认识「{char_input}」，可对话的角色：安可欣、安继年、白宇、Luna、洛疏律、夏终")
             return
 
         char_meta = CHARACTERS.get(char_id)
@@ -2586,7 +2577,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         elif char_name in name_to_id:
             char_id = name_to_id[char_name]
         else:
-            await self._send(stream_id, f"❌ 不认识「{char_name}」，可赠送的角色：安可欣、安继年、白宇、Luna、洛疏律")
+            await self._send(stream_id, f"❌ 不认识「{char_name}」，可赠送的角色：安可欣、安继年、白宇、Luna、洛疏律、夏终")
             return
 
         char_meta = CHARACTERS.get(char_id)

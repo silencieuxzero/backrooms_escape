@@ -44,9 +44,19 @@
     "identity": "M.E.G.CN 信息系统管理员",
     "age": 24,
     "personality": "务实严谨，冷静专注",
-    "relationship": "安可欣（同事）、安继年（同事）",
+    "relationship": "安可欣（同事）、安继年（同事）、夏终（妹妹）",
     "status": "活跃",
     "first_encounter": "Level 1 — Alpha 基地数据中心",
     "description": "洛疏律是 Alpha 基地的信息系统管理员，负责维护 M.E.G.CN 所有的数据库、通讯系统和档案记录。切入后室之前他曾是一名网络安全架构师，凭借扎实的技术功底让基地里那些落后二十年的设备维持着最基本的运转。性格务实、有条理，虽然偶尔会抱怨设备老旧，但从不耽误工作。"
+  },
+  "xiazhong": {
+    "name": "夏终",
+    "identity": "Alpha 基地员工",
+    "age": 20,
+    "personality": "忧郁敏感，内敛沉默",
+    "relationship": "洛疏律（哥哥）",
+    "status": "活跃",
+    "first_encounter": "Level 1 — Alpha 基地休息区",
+    "description": "夏终是 Alpha 基地的普通员工，也是洛疏律的妹妹。她性格忧郁敏感，总是独自一人，不善于表达自己的情感。虽然加入了 Alpha 基地，但她对后室探险并不热衷，更多是为了陪伴哥哥而留下。她常常在基地的角落独自徘徊，似乎在寻找着什么，又像是在逃避着什么。"
   }
 }

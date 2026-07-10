@@ -1,5 +1,16 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.1.3 (2026-07-10)
+
+### 修复
+- 移除 `plugin.py` 中 3 个未使用的导入（`GameState`、`MAX_HISTORY_ROUNDS`、`END_DIALOG_KEYWORDS`）
+- 移除 `plugin.py` 中已废弃的模块级变量 `_backrooms_data`，改为函数内局部变量
+- 移除 `_do_explore_base` 中不可达的死代码分支（`current_level == 399` 守卫）
+- 修复 `plugin.py` 中 docstring 错别字"检到"→"捡到"
+- `_lookup_item` 参数名 `item_id` 统一为 `item_name`，消除命名与实现的不一致
+- `ShutManager.remove_shut` 中 `discard()` 改为 `remove()`，与前置 `if not in` 守卫语义一致
+- `cards.py` 中 `import base64` 移至文件顶部，符合导入规范
+
 ## v1.1.2 (2026-07-09)
 
 ### 新增

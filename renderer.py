@@ -363,6 +363,12 @@ class BackroomsRenderer:
                     f"\n💬 {char_name} 拿出万用表测试了一下墙壁上的接口。「还有电。」",
                     f"\n💬 {char_name} 一边走一边在便携终端上记录数据。",
                 ],
+                "xiazhong": [
+                    f"\n💬 {char_name} 跟在你身后，脚步放得很轻，似乎不想引人注意。",
+                    f"\n💬 {char_name} 拉了拉你的衣角，指了指前面阴影处。「那边……好像有什么动静。」",
+                    f"\n💬 「小心点。」{char_name}低声说，声音里带着一丝不易察觉的紧张。",
+                    f"\n💬 {char_name} 从口袋里摸出一张折叠的纸条递给你。「这是我哥哥写的，也许有用。」",
+                ],
             }
             c_lines = companion_lines.get(companion)
             if c_lines:
@@ -474,6 +480,7 @@ class BackroomsRenderer:
                 "baiyu": f"\n💬 {char_name} 点了点头，难得露出一丝放松的表情。",
                 "luna": f"\n💬 「数据吻合。」{char_name} 合上仪器，「出口确实在这里。」",
                 "luo_shulv": f"\n💬 {char_name} 推了推眼镜。「信号确认，前方是安全的出口。」",
+                "xiazhong": f"\n💬 {char_name} 犹豫了一下，还是伸出手来。「……一起走吧。」",
             }
             lines.append(companion_exit_lines.get(companion, ""))
 
@@ -763,7 +770,7 @@ class BackroomsRenderer:
         if favorability:
             lines.append("")
             for char_id, fav in sorted(favorability.items()):
-                cname = {"ankexin":"安可欣","anjinian":"安继年","baiyu":"白宇","luna":"Luna","luo_shulv":"洛疏律"}.get(char_id, char_id)
+                cname = {"ankexin":"安可欣","anjinian":"安继年","baiyu":"白宇","luna":"Luna","luo_shulv":"洛疏律","xiazhong":"夏终"}.get(char_id, char_id)
                 heart = "❤️" * min(5, fav // 20) + "🤍" * (5 - min(5, fav // 20))
                 lines.append(f"  {cname}：{fav}  {heart}")
 

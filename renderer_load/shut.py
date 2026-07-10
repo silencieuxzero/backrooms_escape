@@ -62,7 +62,7 @@ class ShutManager:
         """将群组移出静默列表。返回 True 表示状态改变。"""
         if group_id not in self._shut_groups:
             return False
-        self._shut_groups.discard(group_id)
+        self._shut_groups.remove(group_id)
         self.save()
         return True
 

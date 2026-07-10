@@ -49,6 +49,12 @@ CHARACTERS: dict[str, dict[str, Any]] = {
         "can_offer_quest": False,
         "level": 1,                          # 在 Level 1 出现
     },
+    "xiazhong": {
+        "name": "夏终",
+        "gift_item_ids": ["o1"],             # 1 瓶杏仁水
+        "can_offer_quest": False,
+        "level": 1,                          # 在 Level 1 出现
+    },
 }
 
 
@@ -82,10 +88,10 @@ class EncounterResult:
 
 # ==================== 遭遇服务 ====================
 
-def _lookup_item(item_id: str, items_pool: list[dict]) -> dict | None:
+def _lookup_item(item_name: str, items_pool: list[dict]) -> dict | None:
     """从物品池中按 name 查找物品模板。"""
     for item in items_pool:
-        if item["name"] == item_id:
+        if item["name"] == item_name:
             return item
     return None
 
