@@ -617,8 +617,11 @@ class BackroomsRenderer:
             "  /br explore     — 探索当前楼层（消耗2理智，可能遇敌/发现物品/捡到纸条）\n"
             "  /br explore base — 在 Alpha 基地内探索（消耗1理智，偶遇基地人物）\n"
             "  /br exit       — 尝试寻找出口（消耗5理智，每次失败增加成功概率）\n"
+            "  /br exit l<N>  — 回溯到已访问的楼层\n"
             "  /br read       — 阅读捡到的纸条（通过合并转发消息展示）\n"
             "  /br status     — 查看探员状态\n"
+            "  /br said <名>  — 与角色进入自由对话模式\n"
+            "  /br say <内容>  — 在对话模式下向角色发送消息\n"
             "  /br invite <名> — 邀请好感度达标的角色一起探索（出口率 +5%）\n"
             "  /br dismiss    — 让同行的角色返回基地\n"
             "  /br gift <名> <编号> — 赠送背包物品给角色（提升好感度）\n"
@@ -811,6 +814,7 @@ class BackroomsRenderer:
             return (
                 "💬 对话模式\n\n"
                 "  自由输入想说的话与角色交流\n"
+                "  /br say <内容>  — 向角色发送消息\n"
                 '  输入「0」或「结束对话」结束对话\n'
                 "  /br status   — 查看当前状态"
             )
