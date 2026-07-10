@@ -71,10 +71,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.1.5"
+PLUGIN_VERSION = "1.1.6"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.1.5"
+SAVE_VERSION = "1.1.6"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -290,32 +290,6 @@ SHORTCUT_POOL = [
     {"levels_skip": (2, 8), "description": "你找到了一扇标注着「快速通道」的防火门，M.E.G.CN 真该多建几个这样的东西。"},
     {"levels_skip": (8, 20), "description": "一个神秘的传送门悬浮在半空中，你鼓起勇气走了进去——出来时已经跨越了多个楼层。"},
 ]
-
-
-# 名人名言池
-FAMOUS_QUOTES = [
-    "「世界上只有一种真正的英雄主义，那就是在认清生活的真相后依然热爱生活。」—— 罗曼·罗兰",
-    "「知行合一。」—— 王阳明",
-    "「为天地立心，为生民立命，为往圣继绝学，为万世开太平。」—— 张载",
-    "「人生到处知何似，应似飞鸿踏雪泥。」—— 苏轼",
-    "「黑夜给了我黑色的眼睛，我却用它寻找光明。」—— 顾城",
-    "「血液的作用之一，是为信仰付出代价。」—— 某教科书",
-    "「生活不可能像你想象得那么好，但也不会像你想象得那么糟。」—— 莫泊桑",
-    "「路漫漫其修远兮，吾将上下而求索。」—— 屈原",
-    "「人生如逆旅，我亦是行人。」—— 苏轼",
-    "「我思故我在。」—— 笛卡尔",
-    "「自由不是做你想做的事，而是不做你不想做的事。」—— 卢梭",
-    "「认识你自己。」—— 苏格拉底",
-    "「凡事预则立，不预则废。」——《礼记》",
-    "「山重水复疑无路，柳暗花明又一村。」—— 陆游",
-    "「竹杖芒鞋轻胜马，谁怕？一蓑烟雨任平生。」—— 苏轼",
-    "「长风破浪会有时，直挂云帆济沧海。」—— 李白",
-    "「沉舟侧畔千帆过，病树前头万木春。」—— 刘禹锡",
-    "「天生我材必有用，千金散尽还复来。」—— 李白",
-]
-
-
-# ==================== 玩家状态 ====================
 
 
 def _load_companions(data: dict) -> list[str]:
@@ -695,14 +669,34 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     @Command(
         "br_say",
-        description="随机名言 — 输出一句名人名言",
-        pattern=r"^/br\s+say$",
+        description="对话 — 在对话模式下输入想说的话",
+        pattern=r"^/br\s+say\s+(.+)",
     )
     async def handle_say(self, **kwargs: Any):
-        """随机输出一句名人名言。"""
+        """对话模式下，将玩家输入传给 LLM 生成角色回复。"""
         stream_id = kwargs.get("stream_id", "")
-        await self._do_say(stream_id)
-        return True, "名言已发送", 1
+        message = kwargs.get("message", {})
+        raw_text = str(
+            message.get("raw_message")
+            or message.get("text")
+            or message.get("message")
+            or ""
+        )
+        m = re.search(r"/br\s+say\s+(.+)", raw_text)
+        if m:
+            content = m.group(1).strip()
+            if content:
+                user_id = str(stream_id)
+                player = self._get_player(user_id)
+                if not player or not player.fsm.is_dialog():
+                    await self._send(stream_id, "❌ 当前不在对话模式中。请先使用 /br said <角色名> 开始对话。")
+                    return True, "未处于对话模式", 1
+
+                asyncio.ensure_future(self._do_dialog_choice(stream_id, content))
+                return True, "对话回复已发送", 1
+
+        await self._send(stream_id, "❌ 请输入想说的话，例如：/br say 你好")
+        return True, "未输入对话内容", 1
 
     @Command(
         "br_off",
@@ -1787,6 +1781,11 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+
+        if not player.unlocked_chars:
+            await self._send(stream_id, "⚠️ 你还不认识基地里的人，先使用 /br explore 探索楼层认识角色吧。")
+            return
+
         await self._auto_end_dialog(stream_id, player)
 
         if player.current_level != 1:
@@ -2709,14 +2708,6 @@ class BackroomsGamePlugin(MaiBotPlugin):
             ),
         )
         self._save_player(user_id)
-
-    async def _do_say(self, stream_id: str) -> None:
-        """随机输出一句名人名言。"""
-        quote = random.choice(FAMOUS_QUOTES)
-        await self._send(
-            stream_id,
-            f"══ 名人名言 ══\n\n{quote}",
-        )
 
     async def _do_off(self, stream_id: str, message: dict) -> None:
         """关闭插件：仅管理员可用，禁用后仅管理员可继续使用。

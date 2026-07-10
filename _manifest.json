@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "id": "github.silencieuxzero.backrooms-escape",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "name": "后室:逃出生天",
   "description": "扮演M.E.G.CN工作人员，从Level 0出发在后室中寻找出口，不断切入下一个楼层直至Level 399的最终出口",
   "author": {

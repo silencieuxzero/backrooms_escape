@@ -75,11 +75,12 @@
 | `/br dismiss` | 让同行角色返回 | 解散当前同行角色，返回 Alpha 基地 |
 | `/br gift <角色名> <编号>` | 赠送物品给角色 | 赠送背包物品提升好感度 |
 | `/br said <角色名>` | 与角色自由对话 | 与已解锁的角色进行 LLM 驱动的自由对话模式，输入任何内容角色都会根据性格回复 |
+| `/br say <对话内容>` | 对话模式下发送消息 | 在对话模式下直接将内容传给 LLM 生成角色回复 |
+| `/br explore base` | Alpha 基地探索 | 在 Level 1 Alpha 基地内探索场景，需先通过 `/br explore` 遇到至少一位角色后解锁 |
 | `/br quest` | 任务系统 | 查看/接受/提交任务，获得贡献点 |
 | `/br work` | 基地工作 | 在 Level 1 Alpha 基地参与解谜工作，获得贡献点 |
 | `/br help` | 游戏帮助 | 忘记命令时查看 |
 | `/br people_net` | 人物关系图 | 查看已解锁角色的背景与关系
-| `/br say` | 随机名言 | 随机输出一句名人名言 |
 | `/br off` | 关闭插件（管理员） | 仅首次使用的用户可关闭，关闭后仅管理员可用 |
 | `/br on` | 启用插件（管理员） | 管理员重新开放插件 |
 
@@ -314,6 +315,10 @@ if not player.fsm.is_playable():
 - **遭遇危险**：可能受伤，或遭遇后室实体。
 - **诡异事件**：一些令人不安但不会直接伤害你的事件。
 
+### 基地探索（/br explore base）
+
+在 Level 1 时，可以使用 `/br explore base` 在 Alpha 基地内探索，触发基地场景事件并获得物品。**需要先通过 `/br explore` 至少遇到一位角色后才能解锁使用。**
+
 ### 寻找出口（/br exit）
 
 每次尝试寻找出口消耗 **5 点理智值**。基础成功率 20%，每次失败后会递增成功率，确保你不会无限卡关。
@@ -473,6 +478,7 @@ output_mode = "text"      # 普通文本消息（默认）
 | `base_exit_chance` | 0.2 | 成功找到出口的基础概率（0.0~1.0） |
 | `exit_chance_increment` | 0.1 | 每次寻找失败后成功概率的提升值 |
 | `entity_encounter_chance` | 0.25 | 在楼层中遭遇实体的基础概率 |
+| `dialog_model` | "" (回退 replyer) | 角色对话使用的 LLM 任务名，留空自动使用回复任务 |
 | `crate_large_chance` | 0.08 | 触发补给时出现大型物资箱的概率（必出杏仁水） |
 | `crate_medium_chance` | 0.15 | 触发补给时出现中型物资箱的概率（必出杏仁水） |
 | `crate_small_chance` | 0.25 | 触发补给时出现小型物资箱的概率（必出杏仁水） |
@@ -717,7 +723,8 @@ backrooms_escape/
 
 ```
 /br said 安可欣         → 进入对话模式，LLM 生成开场白
-（自由输入任意内容）     → LLM 根据角色性格和后室世界观生成回复
+/br say 你好           → 在对话模式下发送消息，LLM 生成角色回复
+（直接输入任意内容）    → 非命令消息也会被自动拦截并转发到 LLM
 "结束对话" / "0" / "end" → LLM 生成告别语后退出
 ```
 
@@ -736,15 +743,15 @@ backrooms_escape/
     │
     ├─ 状态机转移 ALIVE → DIALOG
     ├─ build_system_prompt() → 从角色卡构建 system prompt
-    ├─ self.ctx.llm.generate() → 调用 LLM 生成开场白
+    ├─ self.ctx.llm.generate(model=dialog_model) → 调用指定模型生成开场白
     └─ 保存到 dialog_history
 
-[玩家输入任意文本]
+/br say <对话内容>  或  [玩家输入任意文本]
     │
-    ├─ Hook 拦截 → _do_dialog_choice()
+    ├─ 命令路由 / Hook 拦截 → _do_dialog_choice()
     ├─ is_end_dialog()? → 是 → 告别结束
     ├─ build_message_list(system_prompt, history, input)
-    ├─ self.ctx.llm.generate() → 生成角色回复
+    ├─ self.ctx.llm.generate(model=dialog_model) → 指定模型生成角色回复
     └─ trim_history() → 保存并裁剪历史
 ```
 
@@ -767,6 +774,8 @@ backrooms_escape/
 ### 注意事项
 
 - 只有已解锁的角色才能对话（先通过探索遭遇解锁）
+- 对话模式中可以使用 `/br say <对话内容>` 命令向角色发送消息，也支持直接输入任意文本（自动拦截）
+- 对话使用的 LLM 模型通过 `config.toml` 的 `[game]` → `dialog_model` 配置，默认为 replyer（回复任务）
 - 对话历史保存最近 6 轮，更早的对话会被裁剪
 - 输入「结束对话」「0」「end」等可结束对话
 - LLM 调用失败时有 fallback 回复，不会导致崩溃

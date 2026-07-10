@@ -1,13 +1,16 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
-## v1.1.5 (2026-07-10)
+## v1.1.6 (2026-07-10)
 
 ### 新增
-- 新增 `dialog_model` 配置项（config.py / config.toml），指定角色对话模式使用的 LLM 模型
+- 新增 `dialog_model` 配置项（config.py / config.toml），指定角色对话模式使用的 LLM 任务名
 - 所有对话 LLM 调用（开场白、正常回复、告别语）均传入 `model=dialog_model`，绕过 Planner 直达指定模型
+- 新增 `/br say <对话内容>` 命令，在对话模式下直接将内容传给 LLM 生成角色回复，无需依赖消息拦截钩子
 
 ### 变更
-- 配置默认值：`dialog_model = ""` 时自动回退为 `"replyer"`（回复模型）
+- `/br say` 命令从"随机名言"改为"对话模式输入"，删除名人名言池 `FAMOUS_QUOTES` 列表和 `_do_say` 方法
+- `/br explore base` 命令新增前置条件：必须先通过 `/br explore` 至少遇到一位角色才能使用，否则提示"不认识基地里的人"
+- 配置默认值：`dialog_model = ""` 时自动回退为 `"replyer"`（回复任务）
 - `_manifest.json` 能力声明保留 `llm.generate`
 
 ### 修复
