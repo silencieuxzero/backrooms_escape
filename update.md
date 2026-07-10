@@ -1,5 +1,19 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.1.4 (2026-07-10)
+
+### 重构
+- 同行系统数据模型重构：`PlayerState.companion` (str) → `companions` (list)，支持多角色同时同行
+- 旧版存档 `"companion"` 字段自动迁移至新版 `"companions"` 列表格式
+- `renderer.py` 中 5 个方法的 `companion` 参数改为 `companions: list[str]`，遍历每个同伴生成对话
+
+### 新增
+- 夏终依赖洛疏律：只有洛疏律已在同行中时才能邀请夏终同行
+- 解散洛疏律时，若夏终也在同行中则自动一并解除
+
+### 修复
+- 修复 `render_explore` 调用中 keyword argument 名称 `companion=` → `companions=` 不匹配导致的 TypeError
+
 ## v1.1.3 (2026-07-10)
 
 ### 修复

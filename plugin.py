@@ -71,10 +71,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.1.3"
+PLUGIN_VERSION = "1.1.4"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.1.3"
+SAVE_VERSION = "1.1.4"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -1772,7 +1772,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             event_text = self._renderer.render_explore(
                 ctx, event_text, crate_result, health_cost,
                 note_found, entity_encounter, char_encounter,
-                work_triggered, work_assigned, companion=player.companions,
+                work_triggered, work_assigned, companions=player.companions,
             )
             await self._send_game_event(stream_id, event_text, player)
             return
@@ -1781,7 +1781,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         event_text = self._renderer.render_explore(
             ctx, event_text, crate_result, health_cost,
             note_found, entity_encounter, char_encounter,
-            work_triggered, work_assigned, companion=player.companions,
+            work_triggered, work_assigned, companions=player.companions,
         )
         await self._send_game_event(stream_id, event_text, player)
         self._save_player(user_id)
