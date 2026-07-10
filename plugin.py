@@ -317,6 +317,21 @@ FAMOUS_QUOTES = [
 
 # ==================== 玩家状态 ====================
 
+
+def _load_companions(data: dict) -> list[str]:
+    """从存档字典加载同行列表，兼容旧版单个 ``companion`` 字段。
+
+    - 新版（v1.1.3+）：``"companions": ["ankexin", "xiazhong"]``
+    - 旧版（v1.1.2-）：``"companion": "ankexin"``
+    """
+    raw = data.get("companions")
+    if isinstance(raw, list):
+        return list(raw)
+    raw = data.get("companion")
+    if isinstance(raw, str) and raw:
+        return [raw]
+    return []
+
 @dataclass
 class PlayerState:
     """玩家游戏状态。"""
@@ -338,7 +353,7 @@ class PlayerState:
     work_stories: set[str] = field(default_factory=set)  # 已解锁的工作故事 ID
     l1_explore_count: int = 0  # Level 1 中已探索次数（达到阈值触发日常任务）
     favorability: dict[str, int] = field(default_factory=dict)  # 角色好感度 {char_id: 数值}
-    companion: str | None = None  # 当前同行的角色 ID，None 表示无同伴
+    companions: list[str] = field(default_factory=list)  # 同行角色 ID 列表
     consecutive_misses: int = 0  # 同楼层连续未触发角色遭遇的次数
     visited_levels: set[int] = field(default_factory=set)  # 已访问过的楼层集合
     dialog_char_id: str | None = None  # 对话模式中的角色 ID，None 表示非对话模式
@@ -1107,6 +1122,44 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     @HookHandler(
         "chat.receive.before_process",
+        name="br_dialog_handler",
+        description="拦截对话模式下玩家的非命令消息，路由至 LLM 对话处理器",
+        mode=HookMode.BLOCKING,
+        order=HookOrder.EARLY,
+        error_policy=ErrorPolicy.LOG,
+    )
+    async def handle_dialog_message(self, **kwargs: Any):
+        """在消息处理前检查用户是否处于对话模式。
+
+        若玩家处于 ``DIALOG`` 状态，将非 ``/br`` 消息直接路由至
+        ``_do_dialog_choice`` 并由 LLM 生成角色回复，同时阻止消息
+        进入 MaiBot 的 Planner/LLM 处理链。
+        """
+        message = kwargs.get("message", {})
+        if not message:
+            return {"action": "continue"}
+
+        raw_text = str(message.get("raw_message", "") or "")
+        if not raw_text or raw_text.startswith("/br"):
+            return {"action": "continue"}
+
+        # 从多个来源提取用户标识，尽可能匹配玩家
+        stream_id = str(kwargs.get("stream_id", "") or message.get("stream_id", ""))
+        user_id = str(stream_id)
+        if not user_id:
+            return {"action": "continue"}
+
+        # 尝试从内存或存档加载玩家
+        player = self._get_or_load_player(user_id)
+        if not player or not player.fsm.is_dialog():
+            return {"action": "continue"}
+
+        self.ctx.logger.info("对话模式: 拦截玩家 %s 的输入 → LLM 角色回复", user_id)
+        asyncio.ensure_future(self._do_dialog_choice(stream_id, raw_text.strip()))
+        return {"action": "abort"}
+
+    @HookHandler(
+        "chat.receive.before_process",
         name="br_shut_check",
         description="检查消息所在群组是否被 shut，阻止非 /br 消息进入 Planner",
         mode=HookMode.BLOCKING,
@@ -1118,7 +1171,6 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         被静默的群组中，只有 /br 命令可以继续处理，
         其余消息全部终止在本 hook，不进入 Planner/LLM 处理链。
-        同时检测对话模式下的非命令消息，作为对话选项处理。
         """
         message = kwargs.get("message", {})
         if not message:
@@ -1126,7 +1178,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
         raw_text = str(message.get("raw_message", "") or "")
 
-        # /br 命令放行，让游戏插件正常处理
+        # /br 命令放行
         if raw_text.startswith("/br"):
             return {"action": "continue"}
 
@@ -1137,15 +1189,6 @@ class BackroomsGamePlugin(MaiBotPlugin):
             return {"action": "continue"}
 
         chat_type, chat_id = resolved
-
-        # 检查玩家是否处于对话模式
-        user_id = str(stream_id)
-        player = self._players.get(user_id)
-        if player and player.fsm.is_dialog():
-            # 将非 /br 消息作为对话选项处理
-            self.ctx.logger.debug("对话模式: 处理玩家 %s 的消息: %s", user_id, raw_text)
-            asyncio.ensure_future(self._do_dialog_choice(stream_id, raw_text.strip()))
-            return {"action": "abort"}
 
         if chat_type != "group":
             return {"action": "continue"}
@@ -1190,7 +1233,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             "work_stories": sorted(player.work_stories),
             "l1_explore_count": player.l1_explore_count,
             "favorability": player.favorability,
-            "companion": player.companion,
+            "companions": list(player.companions),
             "consecutive_misses": player.consecutive_misses,
             "visited_levels": sorted(player.visited_levels),
             "dialog_char_id": player.dialog_char_id,
@@ -1236,7 +1279,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             work_stories=set(data.get("work_stories", [])),
             l1_explore_count=data.get("l1_explore_count", 0),
             favorability=data.get("favorability", {}),
-            companion=data.get("companion"),
+            companions=_load_companions(data),
             consecutive_misses=data.get("consecutive_misses", 0),
             visited_levels=set(data.get("visited_levels", [])),
             dialog_char_id=data.get("dialog_char_id"),
@@ -1316,6 +1359,16 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """获取玩家状态。"""
         return self._players.get(user_id)
 
+    def _get_or_load_player(self, user_id: str) -> PlayerState | None:
+        """获取玩家状态，内存中不存在则尝试从存档文件加载。"""
+        player = self._players.get(user_id)
+        if player is not None:
+            return player
+        player = self._load_player(user_id)
+        if player is not None:
+            self._players[user_id] = player
+        return player
+
     def _make_ctx(self, player: PlayerState) -> RenderContext:
         """构建渲染上下文。"""
         return RenderContext(
@@ -1374,13 +1427,16 @@ class BackroomsGamePlugin(MaiBotPlugin):
         """
         ctx = self._make_ctx(player)
         companion_name = None
-        if player.companion:
-            companion_name = CHARACTERS.get(player.companion, {}).get("name", player.companion)
+        if player.companions:
+            companion_name = "、".join(
+                CHARACTERS.get(cid, {}).get("name", cid)
+                for cid in player.companions
+            )
 
         status_text = self._renderer.render_status_panel(
             ctx,
             currency=player.currency,
-            companion=companion_name,
+            companions=player.companions,
             favorability=player.favorability if player.favorability else None,
         )
         commands_text = self._renderer.render_commands_panel(
@@ -1716,7 +1772,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             event_text = self._renderer.render_explore(
                 ctx, event_text, crate_result, health_cost,
                 note_found, entity_encounter, char_encounter,
-                work_triggered, work_assigned, companion=player.companion,
+                work_triggered, work_assigned, companion=player.companions,
             )
             await self._send_game_event(stream_id, event_text, player)
             return
@@ -1725,7 +1781,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         event_text = self._renderer.render_explore(
             ctx, event_text, crate_result, health_cost,
             note_found, entity_encounter, char_encounter,
-            work_triggered, work_assigned, companion=player.companion,
+            work_triggered, work_assigned, companion=player.companions,
         )
         await self._send_game_event(stream_id, event_text, player)
         self._save_player(user_id)
@@ -1808,7 +1864,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if player.current_level == 399:
             await self._send(
                 stream_id,
-                self._renderer.render_level399_escape(player.current_level, player.companion),
+                self._renderer.render_level399_escape(player.current_level, player.companions),
             )
             del self._players[user_id]
             self._delete_player_save(user_id)
@@ -1825,7 +1881,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             exit_chance += 0.05
         if self._has_item(player, "o5"):
             exit_chance += 0.05
-        if player.companion:
+        if player.companions:
             exit_chance += 0.05  # 同伴帮助搜索，+5% 出口率
         exit_chance = min(exit_chance, 1.0)
 
@@ -1840,7 +1896,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 ctx = self._make_ctx(player)
                 await self._send(
                     stream_id,
-                    self._renderer.render_level399_escape(399, player.companion),
+                    self._renderer.render_level399_escape(399, player.companions),
                 )
                 del self._players[user_id]
                 self._delete_player_save(user_id)
@@ -1874,7 +1930,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             new_level_info = self._get_level_info(player.current_level)
             ctx = self._make_ctx(player)
             event_text = self._renderer.render_exit_found(
-                old_level_info, ctx, new_level_info, shortcut_desc, from_level, player.companion,
+                old_level_info, ctx, new_level_info, shortcut_desc, from_level, player.companions,
             )
             await self._send_game_event(stream_id, event_text, player)
 
@@ -2017,7 +2073,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         inventory_text = self._format_inventory(player)
         await self._send(
             stream_id,
-            self._renderer.render_status(ctx, inventory_text, player.currency, player.favorability, player.companion),
+            self._renderer.render_status(ctx, inventory_text, player.currency, player.favorability, player.companions),
         )
 
     async def _do_show_inventory(self, stream_id: str) -> None:
@@ -2336,16 +2392,37 @@ class BackroomsGamePlugin(MaiBotPlugin):
             )
             return
 
-        if player.companion:
-            current = CHARACTERS.get(player.companion, {}).get("name", player.companion)
-            await self._send(
-                stream_id,
-                f"⚠️ {current} 正在与你同行。先使用 /br dismiss 送她/他回去，再邀请其他人。",
-            )
-            return
+        if len(player.companions) >= 1:
+            # 已有同行者：普通角色禁止重复邀请，夏终可依赖洛疏律加入
+            if char_id == "xiazhong":
+                if "luo_shulv" not in player.companions:
+                    await self._send(
+                        stream_id,
+                        f"❌ 夏终不太信任陌生人，只有在 {CHARACTERS['luo_shulv']['name']} 同行时，她才愿意一起出发。",
+                    )
+                    return
+                # 夏终已在同行中则跳过
+                if "xiazhong" in player.companions:
+                    await self._send(stream_id, f"ℹ️ 夏终已经在队伍中了。")
+                    return
+            else:
+                current_names = "、".join(
+                    CHARACTERS.get(cid, {}).get("name", cid)
+                    for cid in player.companions
+                )
+                await self._send(
+                    stream_id,
+                    f"⚠️ {current_names} 正在与你同行。先使用 /br dismiss 送她/他回去，再邀请其他人。",
+                )
+                return
 
-        player.companion = char_id
+        player.companions.append(char_id)
         self._save_player(user_id)
+
+        names = "、".join(
+            CHARACTERS.get(cid, {}).get("name", cid)
+            for cid in player.companions
+        )
         await self._send(
             stream_id,
             f"══════════════════════\n"
@@ -2353,13 +2430,16 @@ class BackroomsGamePlugin(MaiBotPlugin):
             f"══════════════════════\n\n"
             f"「{char_meta['name']}，愿意和我一起探索后面的楼层吗？」\n\n"
             f"{char_meta['name']}微微一笑，点头答应了。\n\n"
-            f"从现在起，{char_meta['name']} 会与你一同前行，\n"
+            f"从现在起，{names} 会与你一同前行，\n"
             f"在探索时提供帮助（出口率 +5%），并分享沿途的见闻。\n\n"
-            f"使用 /br dismiss 可以让她/他返回 Alpha 基地。",
+            f"使用 /br dismiss 可以送同伴返回 Alpha 基地。",
         )
 
     async def _do_dismiss(self, stream_id: str) -> None:
-        """解散同行角色。"""
+        """解散同行角色。
+
+        解散洛疏律时，若夏终也在同行中则一并解除。
+        """
         user_id = str(stream_id)
         player = self._get_player(user_id)
         if not player or not player.fsm.is_playable():
@@ -2367,23 +2447,30 @@ class BackroomsGamePlugin(MaiBotPlugin):
             return
         await self._auto_end_dialog(stream_id, player)
 
-        if not player.companion:
+        if not player.companions:
             await self._send(stream_id, "ℹ️ 当前没有角色与你同行。")
             return
 
-        char_name = CHARACTERS.get(player.companion, {}).get("name", player.companion)
-        char_meta_dismiss = CHARACTERS.get(player.companion, {})
-        char_level = char_meta_dismiss.get("level", 1)
-        player.companion = None
+        dismissed_names = []
+        for cid in list(player.companions):
+            cname = CHARACTERS.get(cid, {}).get("name", cid)
+            dismissed_names.append(cname)
+            # 解散洛疏律时，夏终也一并离开
+            if cid == "luo_shulv" and "xiazhong" in player.companions:
+                player.companions.remove("xiazhong")
+                dismissed_names.append(CHARACTERS["xiazhong"]["name"])
+            player.companions.remove(cid)
+
         self._save_player(user_id)
+        names_text = "、".join(dismissed_names)
         await self._send(
             stream_id,
             f"══════════════════════\n"
             f"  👋 告别\n"
             f"══════════════════════\n\n"
-            f"你送 {char_name} 回到了 Alpha 基地。\n"
-            f"「下次需要我的时候，随时来 Level {char_level} 找我。」\n\n"
-            f"{char_name} 挥了挥手，转身消失在走廊尽头。",
+            f"你送 {names_text} 回到了 Alpha 基地。\n"
+            f"「下次需要我的时候，随时来找我。」\n"
+            f"她们挥了挥手，转身消失在走廊尽头。",
         )
 
     # ── 对话模式（LLM 驱动）──

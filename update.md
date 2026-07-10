@@ -12,6 +12,10 @@
 - `/br said`、`/br invite`、`/br gift` 命令正则从 `(\S+)` 改为只匹配中文/字母字符，避免捕获 `'}]` 等消息格式杂音
 - `/br said`、`/br invite`、`/br gift` 错误提示中的角色列表改为从 `player.unlocked_chars` 动态生成，只显示玩家已解锁的角色
 
+### 新增
+- 新增独立的对话模式钩子 `br_dialog_handler`，在 `chat.receive.before_process` 阶段优先拦截对话模式下玩家的非命令消息，路由至 LLM 对话处理器，避免触发 MaiBot Planner
+- 新增 `_get_or_load_player` 方法，玩家不在内存时自动从存档文件加载，提高对话框消息匹配的可靠性
+
 ## v1.1.2 (2026-07-09)
 
 ### 新增

@@ -222,7 +222,7 @@ class BackroomsRenderer:
         char_encounter: tuple[str, str, str | None, str | None, int, int] | None = None,
         work_triggered: bool = False,
         work_assigned: tuple[str, str] | None = None,
-        companion: str | None = None,
+        companions: list[str] | None = None,
     ) -> str:
         """探索结果消息。
 
@@ -236,7 +236,7 @@ class BackroomsRenderer:
             char_encounter: (角色ID, 剧情文本, 赠送文本, 任务ID, 好感度增量, 当前好感度) 或 None。
             work_triggered: 是否有新的基地工作可用。
             work_assigned: (工作ID, 工作标题) — 安可欣主动派发的日常工作任务。
-            companion: 当前同行的角色 ID，None 表示无同伴。
+            companions: 当前同行的角色 ID 列表，空列表表示无同伴。
         """
         lines = [f"🔍 你在 {ctx.level_info['title']} 中探索……"]
 
@@ -330,49 +330,50 @@ class BackroomsRenderer:
             lines.append("═══════════════════════════════════")
 
         # 同伴同行提示
-        if companion:
-            char_name = CHARACTERS.get(companion, {}).get("name", companion)
-            companion_lines = {
-                "ankexin": [
-                    f"\n💬 {char_name} 跟在你身边，警惕地观察着四周。",
-                    f"\n💬 {char_name} 拿出笔记本快速记下了些什么。",
-                    f"\n💬 「这边看起来安全。」{char_name}低声说道。",
-                    f"\n💬 {char_name} 递给你一瓶杏仁水。「补充点水分吧。」",
-                ],
-                "anjinian": [
-                    f"\n💬 {char_name} 拍了拍你的肩膀。「别担心，有我在呢。」",
-                    f"\n💬 「这条通道的结构很稳固。」{char_name}检查着墙壁说道。",
-                    f"\n💬 {char_name} 掏出一个小工具摆弄着。「说不定能用上。」",
-                    f"\n💬 「嘿，前面好像有动静。」{char_name}压低声音说。",
-                ],
-                "baiyu": [
-                    f"\n💬 {char_name} 沉默地走在前面，时不时停下来确认方向。",
-                    f"\n💬 {char_name} 蹲下检查地面痕迹。「有人不久前经过这里。」",
-                    f"\n💬 「保持安静。」{char_name}低声说，眼神扫过前方的阴影。",
-                    f"\n💬 {char_name} 从背包里掏出一根能量棒递给你。「拿着。」",
-                ],
-                "luna": [
-                    f"\n💬 {char_name} 拿出一个奇怪的小仪器，盯着上面的读数。",
-                    f"\n💬 「这里的频率有点异常。」{char_name}若有所思地说。",
-                    f"\n💬 {char_name} 在笔记本上飞快地记录着什么。",
-                    f"\n💬 「你有没有感觉到……这层的空气不太一样？」{char_name}问。",
-                ],
-                "luo_shulv": [
-                    f"\n💬 {char_name} 推了推眼镜，打量着周围的线路布局。",
-                    f"\n💬 「这里的管线排布很不合理。」{char_name}皱着眉头说。",
-                    f"\n💬 {char_name} 拿出万用表测试了一下墙壁上的接口。「还有电。」",
-                    f"\n💬 {char_name} 一边走一边在便携终端上记录数据。",
-                ],
-                "xiazhong": [
-                    f"\n💬 {char_name} 跟在你身后，脚步放得很轻，似乎不想引人注意。",
-                    f"\n💬 {char_name} 拉了拉你的衣角，指了指前面阴影处。「那边……好像有什么动静。」",
-                    f"\n💬 「小心点。」{char_name}低声说，声音里带着一丝不易察觉的紧张。",
-                    f"\n💬 {char_name} 从口袋里摸出一张折叠的纸条递给你。「这是我哥哥写的，也许有用。」",
-                ],
-            }
-            c_lines = companion_lines.get(companion)
-            if c_lines:
-                lines.append(random.choice(c_lines))
+        if companions:
+            for cid in companions:
+                char_name = CHARACTERS.get(cid, {}).get("name", cid)
+                companion_lines = {
+                    "ankexin": [
+                        f"\n💬 {char_name} 跟在你身边，警惕地观察着四周。",
+                        f"\n💬 {char_name} 拿出笔记本快速记下了些什么。",
+                        f"\n💬 「这边看起来安全。」{char_name}低声说道。",
+                        f"\n💬 {char_name} 递给你一瓶杏仁水。「补充点水分吧。」",
+                    ],
+                    "anjinian": [
+                        f"\n💬 {char_name} 拍了拍你的肩膀。「别担心，有我在呢。」",
+                        f"\n💬 「这条通道的结构很稳固。」{char_name}检查着墙壁说道。",
+                        f"\n💬 {char_name} 掏出一个小工具摆弄着。「说不定能用上。」",
+                        f"\n💬 「嘿，前面好像有动静。」{char_name}压低声音说。",
+                    ],
+                    "baiyu": [
+                        f"\n💬 {char_name} 沉默地走在前面，时不时停下来确认方向。",
+                        f"\n💬 {char_name} 蹲下检查地面痕迹。「有人不久前经过这里。」",
+                        f"\n💬 「保持安静。」{char_name}低声说，眼神扫过前方的阴影。",
+                        f"\n💬 {char_name} 从背包里掏出一根能量棒递给你。「拿着。」",
+                    ],
+                    "luna": [
+                        f"\n💬 {char_name} 拿出一个奇怪的小仪器，盯着上面的读数。",
+                        f"\n💬 「这里的频率有点异常。」{char_name}若有所思地说。",
+                        f"\n💬 {char_name} 在笔记本上飞快地记录着什么。",
+                        f"\n💬 「你有没有感觉到……这层的空气不太一样？」{char_name}问。",
+                    ],
+                    "luo_shulv": [
+                        f"\n💬 {char_name} 推了推眼镜，打量着周围的线路布局。",
+                        f"\n💬 「这里的管线排布很不合理。」{char_name}皱着眉头说。",
+                        f"\n💬 {char_name} 拿出万用表测试了一下墙壁上的接口。「还有电。」",
+                        f"\n💬 {char_name} 一边走一边在便携终端上记录数据。",
+                    ],
+                    "xiazhong": [
+                        f"\n💬 {char_name} 跟在你身后，脚步放得很轻，似乎不想引人注意。",
+                        f"\n💬 {char_name} 拉了拉你的衣角，指了指前面阴影处。「那边……好像有什么动静。」",
+                        f"\n💬 「小心点。」{char_name}低声说，声音里带着一丝不易察觉的紧张。",
+                        f"\n💬 {char_name} 从口袋里摸出一张折叠的纸条递给你。「这是我哥哥写的，也许有用。」",
+                    ],
+                }
+                c_lines = companion_lines.get(cid)
+                if c_lines:
+                    lines.append(random.choice(c_lines))
 
         # 引导
         if ctx.health > 0 and ctx.current_level < 399:
@@ -461,7 +462,7 @@ class BackroomsRenderer:
         new_level_info: dict[str, Any],
         shortcut_desc: str | None,
         from_level: int,
-        companion: str | None = None,
+        companions: list[str] | None = None,
     ) -> str:
         """找到出口时的消息。"""
         lines = [f"🚪 你仔细搜索着 {old_level_info['title']} 的每一个角落……"]
@@ -472,17 +473,20 @@ class BackroomsRenderer:
             lines.append("你找到了出口！四周的景象开始扭曲模糊……")
 
         # 同伴互动
-        if companion:
-            char_name = CHARACTERS.get(companion, {}).get("name", companion)
+        if companions:
             companion_exit_lines = {
-                "ankexin": f"\n💬 {char_name} 兴奋地说：「就是这里！我们走！」",
-                "anjinian": f"\n💬 「找到了！」{char_name} 咧嘴一笑，「好样的，搭档！」",
-                "baiyu": f"\n💬 {char_name} 点了点头，难得露出一丝放松的表情。",
-                "luna": f"\n💬 「数据吻合。」{char_name} 合上仪器，「出口确实在这里。」",
-                "luo_shulv": f"\n💬 {char_name} 推了推眼镜。「信号确认，前方是安全的出口。」",
-                "xiazhong": f"\n💬 {char_name} 犹豫了一下，还是伸出手来。「……一起走吧。」",
+                "ankexin": lambda n: f"\n💬 {n} 兴奋地说：「就是这里！我们走！」",
+                "anjinian": lambda n: f"\n💬 「找到了！」{n} 咧嘴一笑，「好样的，搭档！」",
+                "baiyu": lambda n: f"\n💬 {n} 点了点头，难得露出一丝放松的表情。",
+                "luna": lambda n: f"\n💬 「数据吻合。」{n} 合上仪器，「出口确实在这里。」",
+                "luo_shulv": lambda n: f"\n💬 {n} 推了推眼镜。「信号确认，前方是安全的出口。」",
+                "xiazhong": lambda n: f"\n💬 {n} 犹豫了一下，还是伸出手来。「……一起走吧。」",
             }
-            lines.append(companion_exit_lines.get(companion, ""))
+            for cid in companions:
+                char_name = CHARACTERS.get(cid, {}).get("name", cid)
+                line_fn = companion_exit_lines.get(cid)
+                if line_fn:
+                    lines.append(line_fn(char_name))
 
         nli = new_level_info
         lines.append(f"\n📍 你切入了 {nli['title']}")
@@ -542,7 +546,7 @@ class BackroomsRenderer:
 
     def render_status(self, ctx: RenderContext, inventory_text: str, currency: int = 0,
                        favorability: dict[str, int] | None = None,
-                       companion: str | None = None) -> str:
+                       companions: list[str] | None = None) -> str:
         """探员状态面板。"""
         h_label = self.health_label(ctx.health, ctx.initial_health)
         s_label = self.sanity_label(ctx.sanity, ctx.initial_sanity)
@@ -570,10 +574,13 @@ class BackroomsRenderer:
                 lines.append(f"  {char_name}：{fav}  {heart}")
 
         # 同伴信息
-        if companion:
-            char_name = CHARACTERS.get(companion, {}).get("name", companion)
-            lines.append(f"\n👥 同行：{char_name}（出口率 +5%）")
-            lines.append(f"  使用 /br dismiss 可以让她/他返回基地。")
+        if companions:
+            names = "、".join(
+                CHARACTERS.get(cid, {}).get("name", cid)
+                for cid in companions
+            )
+            lines.append(f"\n👥 同行：{names}（出口率 +5%）")
+            lines.append(f"  使用 /br dismiss 可以送同伴返回基地。")
 
         lines += [
             f"\n📦 背包物品：\n{inventory_text}\n\n"
@@ -707,13 +714,16 @@ class BackroomsRenderer:
             "  /br help      — 游戏帮助"
         )
 
-    def render_level399_escape(self, level_count: int, companion: str | None = None) -> str:
+    def render_level399_escape(self, level_count: int, companions: list[str] | None = None) -> str:
         """通关消息。"""
         companion_text = ""
-        if companion:
-            char_name = CHARACTERS.get(companion, {}).get("name", companion)
+        if companions:
+            names = "、".join(
+                CHARACTERS.get(cid, {}).get("name", cid)
+                for cid in companions
+            )
             companion_text = (
-                f"\n{char_name} 跟在你身后一起穿过了那扇门。\n"
+                f"\n{names} 跟在你身后一起穿过了那扇门。\n"
                 f"在阳光下，你们相视一笑——终于回来了。\n\n"
             )
 
@@ -743,7 +753,7 @@ class BackroomsRenderer:
     def render_status_panel(
         ctx: RenderContext,
         currency: int = 0,
-        companion: str | None = None,
+        companions: list[str] | None = None,
         favorability: dict[str, int] | None = None,
     ) -> str:
         """人物状态面板（合并转发第二段）。"""
@@ -764,8 +774,12 @@ class BackroomsRenderer:
         if currency > 0:
             lines.append(f"💰 贡献点：{currency}")
 
-        if companion:
-            lines.append(f"👥 同行：{companion}（出口率 +5%）")
+        if companions:
+            names = "、".join(
+                CHARACTERS.get(cid, {}).get("name", cid)
+                for cid in companions
+            )
+            lines.append(f"👥 同行：{names}（出口率 +5%）")
 
         if favorability:
             lines.append("")
