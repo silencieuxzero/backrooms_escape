@@ -49,6 +49,16 @@
     "first_encounter": "Level 1 — Alpha 基地数据中心",
     "description": "洛疏律是 Alpha 基地的信息系统管理员，负责维护 M.E.G.CN 所有的数据库、通讯系统和档案记录。切入后室之前他曾是一名网络安全架构师，凭借扎实的技术功底让基地里那些落后二十年的设备维持着最基本的运转。性格务实、有条理，虽然偶尔会抱怨设备老旧，但从不耽误工作。"
   },
+  "qiziwu": {
+    "name": "祁子午",
+    "identity": "M.E.G.CN Level 3 前哨站通讯技术员",
+    "age": 25,
+    "personality": "活泼开朗，乐观健谈",
+    "relationship": "安可欣（同事）、安继年（同事）、洛疏律（同事）、夏终（同事）",
+    "status": "活跃",
+    "first_encounter": "Level 3 — M.E.G.CN 前哨站通讯室",
+    "description": "祁子午是 Level 3 M.E.G.CN 前哨站的通讯技术员，性格活泼开朗，是基地里的气氛担当。他擅长修理各种通讯设备，也乐于与来访的切问者分享 Level 3 的见闻。虽然工作环境压抑，但他总能找到乐子，是基地里少有的乐观派。"
+  },
   "xiazhong": {
     "name": "夏终",
     "identity": "Alpha 基地员工",

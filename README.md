@@ -170,6 +170,7 @@ backrooms_escape/
 │   │   ├── baiyu.txt
 │   │   ├── luna.txt
 │   │   ├── luo_shulv.txt
+│   │   ├── qiziwu.txt
 │   │   ├── people_quests.json
 │   │   └── people_relationship.json
 │   └── base_story/            #   基地工作解谜 + 解锁故事文本

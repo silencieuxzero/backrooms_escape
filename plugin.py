@@ -72,10 +72,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.1.6"
+PLUGIN_VERSION = "1.1.7"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.1.6"
+SAVE_VERSION = "1.1.7"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 

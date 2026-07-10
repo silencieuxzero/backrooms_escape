@@ -55,6 +55,12 @@ CHARACTERS: dict[str, dict[str, Any]] = {
         "can_offer_quest": False,
         "level": 1,                          # 在 Level 1 出现
     },
+    "qiziwu": {
+        "name": "祁子午",
+        "gift_item_ids": ["o6"],             # 1 根能量棒
+        "can_offer_quest": False,
+        "level": 3,                          # 在 Level 3 出现
+    },
 }
 
 
