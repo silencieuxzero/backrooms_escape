@@ -59,6 +59,7 @@ output_mode = "text"      # 普通文本消息（兼容性更好）
 | `/br start` | 开始新游戏 |
 | `/br explore` | 探索当前楼层 |
 | `/br exit` | 尝试寻找出口 |
+| `/br exit l<N>` | 回溯到已访问过的指定楼层，如 `/br exit l1` 回到 Level 1 |
 | `/br read` | 阅读捡到的纸条（合并转发消息） |
 | `/br use <编号>` | 使用物品，如 `/br use 1` |
 | `/br status` | 查看探员状态 |
@@ -150,11 +151,11 @@ backrooms_escape/
 │   ├── state_machine.py       #   有限状态机（GameStateMachine）
 │   ├── story_manage.py        #   故事/任务/工作/人物剧情管理器
 │   ├── people_manage.py       #   角色系统（注册表 + 遭遇服务）
-│   └── dialogue_manage.py     #   对话系统（LLM prompt 构建器 + 对话历史管理）
+│   ├── dialogue_manage.py     #   对话系统（LLM prompt 构建器 + 对话历史管理）
+│   └── backrooms_data.json    #   物品/实体数据池
 │
 ├── config.toml                # 插件配置文件（启动时自动读取）
 ├── _manifest.json             # 插件元信息（ID、版本、兼容性声明）
-├── backrooms_data.json        # 物品/实体数据池
 │
 ├── br_story/                  # 故事/剧情文本目录
 │   ├── level_story/           #   后室背景故事纸条文本文件

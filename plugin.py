@@ -42,7 +42,7 @@ from .renderer import (
 
 # ==================== 外部数据文件 ====================
 
-_BACKROOMS_DATA_PATH = Path(__file__).parent / "backrooms_data.json"
+_BACKROOMS_DATA_PATH = Path(__file__).parent / "renderer_load" / "backrooms_data.json"
 """插件目录下的物品/实体数据文件路径。"""
 
 _backrooms_data: dict = {}
@@ -75,10 +75,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.1.0"
+PLUGIN_VERSION = "1.1.2"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.1.0"
+SAVE_VERSION = "1.1.2"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -324,6 +324,8 @@ class PlayerState:
     l1_explore_count: int = 0  # Level 1 中已探索次数（达到阈值触发日常任务）
     favorability: dict[str, int] = field(default_factory=dict)  # 角色好感度 {char_id: 数值}
     companion: str | None = None  # 当前同行的角色 ID，None 表示无同伴
+    consecutive_misses: int = 0  # 同楼层连续未触发角色遭遇的次数
+    visited_levels: set[int] = field(default_factory=set)  # 已访问过的楼层集合
     dialog_char_id: str | None = None  # 对话模式中的角色 ID，None 表示非对话模式
     dialog_node_id: str = "start"  # 当前对话树节点 ID
     dialog_history: list[dict[str, str]] = field(default_factory=list)  # 对话历史 [{role, content}]
@@ -568,6 +570,27 @@ class BackroomsGamePlugin(MaiBotPlugin):
         stream_id = kwargs.get("stream_id", "")
         await self._do_exit(stream_id)
         return True, "出口搜索完成", 1
+
+    @Command(
+        "br_exit_to",
+        description="回溯楼层 — 尝试回到已访问过的指定楼层，如 /br exit l1 回到 Level 1",
+        pattern=r"^/br\s+exit\s+l(\d+)$",
+    )
+    async def handle_exit_to(self, **kwargs: Any):
+        """回溯到已访问过的指定楼层。"""
+        stream_id = kwargs.get("stream_id", "")
+        message = kwargs.get("message", {})
+        raw_text = str(
+            message.get("raw_message")
+            or message.get("text")
+            or message.get("message")
+            or ""
+        )
+        m = re.search(r"/br\s+exit\s+l(\d+)", raw_text)
+        if m:
+            target = int(m.group(1))
+            await self._do_exit_to_level(stream_id, target)
+        return True, "回溯处理完成", 1
 
     @Command(
         "br_status",
@@ -1144,6 +1167,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
             "l1_explore_count": player.l1_explore_count,
             "favorability": player.favorability,
             "companion": player.companion,
+            "consecutive_misses": player.consecutive_misses,
+            "visited_levels": sorted(player.visited_levels),
             "dialog_char_id": player.dialog_char_id,
             "dialog_node_id": player.dialog_node_id,
             "dialog_history": player.dialog_history,
@@ -1188,6 +1213,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
             l1_explore_count=data.get("l1_explore_count", 0),
             favorability=data.get("favorability", {}),
             companion=data.get("companion"),
+            consecutive_misses=data.get("consecutive_misses", 0),
+            visited_levels=set(data.get("visited_levels", [])),
             dialog_char_id=data.get("dialog_char_id"),
             dialog_node_id=data.get("dialog_node_id", "start"),
             dialog_history=data.get("dialog_history", []),
@@ -1496,6 +1523,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         player.fsm.apply(GameEvent.START)
         self._players[user_id] = player
         self._save_player(user_id)
+        player.visited_levels.add(0)
 
         ctx = self._make_ctx(player)
         event_text = self._renderer.render_start(ctx)
@@ -1508,6 +1536,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+        await self._auto_end_dialog(stream_id, player)
 
         if item_index < 1 or item_index > len(player.inventory):
             await self._send(
@@ -1546,6 +1575,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+        await self._auto_end_dialog(stream_id, player)
 
         if player.current_level == 399:
             await self._send(stream_id, self._renderer.render_already_at_399())
@@ -1619,6 +1649,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             quest_manager=self._quest_manager,
             ankexin_task_chance=cfg.ankexin_task_chance,
             favorability_per_encounter=cfg.favorability_per_encounter,
+            consecutive_misses=player.consecutive_misses,
         )
         if result is not None:
             char_encounter = (
@@ -1626,6 +1657,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 result.gift_text, result.quest_offer,
                 result.favorability_increase, result.current_favorability,
             )
+            player.consecutive_misses = 0  # 触发后重置保底计数
+        else:
+            player.consecutive_misses += 1  # 未触发则累计
 
         # 理智值过低效果
         if player.sanity <= 0:
@@ -1679,6 +1713,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+        await self._auto_end_dialog(stream_id, player)
 
         cfg = self.config.game
 
@@ -1748,6 +1783,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             else:
                 player.current_level += 1
 
+            player.visited_levels.add(player.current_level)
             new_level_info = self._get_level_info(player.current_level)
             ctx = self._make_ctx(player)
             event_text = self._renderer.render_exit_found(
@@ -1811,6 +1847,73 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 ctx, player.exit_attempts, event_text,
                 ex_crate_result, ex_health_cost, ex_note_found,
             )
+            await self._send_game_event(stream_id, event_text, player)
+
+        self._save_player(user_id)
+
+    async def _do_exit_to_level(self, stream_id: str, target_level: int) -> None:
+        """尝试回溯到已访问过的指定楼层。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.fsm.is_playable():
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+        await self._auto_end_dialog(stream_id, player)
+
+        if target_level == player.current_level:
+            await self._send(stream_id, "❌ 你现在就在这个楼层，不需要回溯。")
+            return
+
+        if target_level not in player.visited_levels:
+            await self._send(stream_id, f"❌ 你还没有访问过 Level {target_level}，无法回溯到那里。")
+            return
+
+        if target_level == 399:
+            await self._send(stream_id, "❌ 不能直接回溯到最终出口 Level 399。")
+            return
+
+        cfg = self.config.game
+        player.sanity = max(0, player.sanity - 10)
+
+        from_level = player.current_level
+        # 回溯成功率：基础 50%，目地楼层越低越熟悉（+5%），累计偏移+10%
+        distance = abs(target_level - from_level)
+        base_chance = 0.50
+        familiarity_bonus = max(0, (10 - target_level) * 0.02)  # 低楼层更熟悉
+        attempt_bonus = player.exit_attempts * 0.10
+        total_chance = min(0.95, base_chance + familiarity_bonus + attempt_bonus)
+
+        if random.random() < total_chance:
+            # 成功
+            old_level_info = self._get_level_info(from_level)
+            player.current_level = target_level
+            player.exit_attempts = 0
+            player.visited_levels.add(target_level)
+            new_level_info = self._get_level_info(target_level)
+            ctx = self._make_ctx(player)
+            event_text = (
+                f"🔙 你努力回忆着来时的路，在错综复杂的后室走廊中摸索前行……\n\n"
+                f"✨ 你成功了！你找到了回到 {new_level_info['title']} 的道路。\n\n"
+                f"{new_level_info['description']}"
+            )
+            await self._send_game_event(stream_id, event_text, player)
+        else:
+            # 失败
+            player.exit_attempts += 1
+            if player.sanity <= 0:
+                player.health = max(0, player.health - 10)
+            ctx = self._make_ctx(player)
+            event_text = (
+                f"🔙 你努力寻找着回到 Level {target_level} 的道路……\n\n"
+                f"❌ 但后室的空间太过混乱，你迷失了方向。理智值 -10\n"
+                f"当前楼层：{ctx.level_info['title']}"
+            )
+            if player.health <= 0:
+                player.fsm.apply(GameEvent.DIE)
+                del self._players[user_id]
+                self._delete_player_save(user_id)
+                await self._send_game_event(stream_id, event_text, player)
+                return
             await self._send_game_event(stream_id, event_text, player)
 
         self._save_player(user_id)
@@ -1896,6 +1999,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+        await self._auto_end_dialog(stream_id, player)
 
         quest = self._quest_manager.get_quest(quest_id)
         if not quest:
@@ -1923,6 +2027,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+        await self._auto_end_dialog(stream_id, player)
 
         quest = self._quest_manager.get_quest(quest_id)
         if not quest:
@@ -2028,12 +2133,13 @@ class BackroomsGamePlugin(MaiBotPlugin):
         )
 
     async def _do_work_start(self, stream_id: str, work_id: str) -> None:
-        """开始一个工作。"""
+        """开始工作。"""
         user_id = str(stream_id)
         player = self._get_player(user_id)
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+        await self._auto_end_dialog(stream_id, player)
 
         if player.current_level != 1:
             await self._send(stream_id, "⚠️ 基地工作仅在 Level 1 的 M.E.G.CN Alpha 基地进行。")
@@ -2102,6 +2208,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+        await self._auto_end_dialog(stream_id, player)
 
         # 将中文名映射为角色 ID
         name_to_id = {
@@ -2166,6 +2273,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+        await self._auto_end_dialog(stream_id, player)
 
         if not player.companion:
             await self._send(stream_id, "ℹ️ 当前没有角色与你同行。")
@@ -2254,6 +2362,47 @@ class BackroomsGamePlugin(MaiBotPlugin):
         # LLM 调用失败的 fallback
         await self._send(stream_id, f"—— {char_name} ——\n\n「……你来了。」")
 
+    async def _auto_end_dialog(self, stream_id: str, player: PlayerState) -> None:
+        """自动结束对话模式，让角色进行自然告别。"""
+        if not player.fsm.is_dialog():
+            return
+
+        char_id = player.dialog_char_id
+        if not char_id:
+            player.fsm.apply(GameEvent.END_DIALOG)
+            player.dialog_char_id = None
+            player.dialog_history = []
+            self._save_player(str(stream_id))
+            return
+
+        char_meta = CHARACTERS.get(char_id, {})
+        char_name = char_meta.get("name", char_id)
+
+        # 尝试用 LLM 生成告别语
+        farewell_text = ""
+        try:
+            system_prompt = build_system_prompt(char_id, self._people_relationship_data)
+            farewell_history = player.dialog_history + [
+                {"role": "user", "content": f"{char_name}，我有事要先走了。"}
+            ]
+            farewell_messages = build_message_list(system_prompt, farewell_history, f"{char_name}突然有急事要离开，自然地告别。")
+            result = await self.ctx.llm.generate(prompt=farewell_messages)
+            if result.get("success"):
+                farewell_text = result.get("response", "").strip()
+        except Exception as exc:
+            self.ctx.logger.error("自动告别 LLM 生成失败: %s", exc)
+
+        # 状态转移
+        player.fsm.apply(GameEvent.END_DIALOG)
+        player.dialog_char_id = None
+        player.dialog_history = []
+        self._save_player(str(stream_id))
+
+        if farewell_text:
+            await self._send(stream_id, f"—— {char_name} ——\n\n{farewell_text}\n")
+        else:
+            await self._send(stream_id, f"「{char_name}」点了点头，向你告别。\n")
+
     async def _do_dialog_choice(self, stream_id: str, user_input: str) -> None:
         """处理对话模式中的玩家输入，调用 LLM 生成角色回复。"""
         user_id = str(stream_id)
@@ -2332,6 +2481,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         if not player or not player.fsm.is_playable():
             await self._send(stream_id, self._renderer.render_not_started())
             return
+        await self._auto_end_dialog(stream_id, player)
 
         # 将中文名映射为角色 ID
         name_to_id = {meta["name"]: cid for cid, meta in CHARACTERS.items()}

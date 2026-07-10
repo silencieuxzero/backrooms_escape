@@ -66,6 +66,7 @@
 | `/br start` | 开始新游戏 | 首次进入 / 死亡后重开 |
 | `/br explore` | 探索当前楼层 | 每层第一步，搜寻物品和线索 |
 | `/br exit` | 尝试寻找出口 | 探索之后，尝试切入下一层 |
+| `/br exit l<N>` | 回溯到已访问过的楼层 | 回到已访问过的指定楼层，如 `/br exit l1` 回到 Level 1 |
 | `/br read` | 阅读捡到的纸条 | 探索中捡到纸条后，通过合并转发消息展示内容 |
 | `/br use <编号>` | 使用背包中的物品 | 需要恢复生命/理智时使用。例：`/br use 1` |
 | `/br status` | 查看探员状态 | 随时查看生命/理智/进度/贡献点 |
@@ -152,7 +153,8 @@ backrooms_escape/
 │   ├── story_manage.py        # 数据加载层 — StoryManager / PeopleStoryManager /
 │   │                          #               QuestManager / WorkManager / BaseWorkStoryManager
 │   ├── people_manage.py       # 角色业务层 — CharacterEncounterService / CHARACTERS 注册表
-│   └── dialogue_manage.py     # LLM 对话系统
+│   ├── dialogue_manage.py     # LLM 对话系统
+│   └── backrooms_data.json    # 物品/实体数据池
 │
 ├── br_story/                  # 故事/剧情/数据目录
 │   ├── level_story/           # 后室背景故事纸条文本
@@ -171,7 +173,6 @@ backrooms_escape/
 │
 ├── config.toml                # 插件配置文件（启动时自动读取）
 ├── _manifest.json             # 插件元信息（ID、版本、兼容性声明）
-├── backrooms_data.json        # 物品/实体数据池
 ├── br_data/                   # 玩家存档（运行时自动创建）
 │   └── *.json
 └── .gitignore
@@ -787,14 +788,15 @@ backrooms_escape/
 │       ├── anjinian.txt                  ← 安继年剧情
 │       ├── people_quests.json            ← 任务数据
 │       └── people_relationship.json      ← 人物关系数据
-├── backrooms_data.json                   ← 物品/实体数据
 ├── plugin.py
 ├── renderer.py                           ← 渲染器 + 拓展模块加载入口
 ├── renderer_load/
 │   ├── state_machine.py                  ← 游戏有限状态机
 │   ├── shut.py                           ← 群聊静默管理
 │   ├── story_manage.py                   ← 故事/任务/工作/人物剧情加载
-│   └── people_manage.py                  ← 角色系统（注册表 + 遭遇服务）
+│   ├── people_manage.py                  ← 角色系统（注册表 + 遭遇服务）
+│   ├── dialogue_manage.py                ← LLM 对话系统
+│   └── backrooms_data.json               ← 物品/实体数据
 ├── config.py
 └── config.toml
 ```

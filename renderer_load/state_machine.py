@@ -143,7 +143,7 @@ class GameStateMachine:
 
     def is_playable(self) -> bool:
         """返回是否处于可进行游戏操作的状态（非 NOT_STARTED / DEAD / ESCAPED）。"""
-        return self._state in (GameState.ALIVE, GameState.AT_399)
+        return self._state in (GameState.ALIVE, GameState.AT_399, GameState.DIALOG)
 
     def is_dialog(self) -> bool:
         """是否处于对话模式。"""

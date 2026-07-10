@@ -111,6 +111,7 @@ class CharacterEncounterService:
         quest_manager: Any,
         ankexin_task_chance: float,
         favorability_per_encounter: int = 10,
+        consecutive_misses: int = 0,
     ) -> EncounterResult | None:
         """掷骰判定当前楼层是否发生角色遭遇。
 
@@ -122,6 +123,7 @@ class CharacterEncounterService:
             quest_manager: ``QuestManager`` 实例。
             ankexin_task_chance: 安可欣发放任务的概率 (0.0~1.0)。
             favorability_per_encounter: 每次遭遇增加的好感度。
+            consecutive_misses: 同楼层连续未触发遭遇的次数（用于保底）。
 
         Returns:
             遭遇结果；未触发时返回 ``None``。
@@ -135,8 +137,14 @@ class CharacterEncounterService:
         if not available:
             return None
 
-        # 40% 基础遭遇概率
-        if random.random() >= 0.40:
+        # 基础遭遇概率 70%，每次未触发后续递增 10%，最高 100%
+        # 连续 3 次未触发后保底触发
+        base_chance = 0.70
+        encounter_chance = min(1.0, base_chance + consecutive_misses * 0.10)
+        if consecutive_misses >= 3:
+            encounter_chance = 1.0
+
+        if random.random() >= encounter_chance:
             return None
 
         char_id = random.choice(available)
