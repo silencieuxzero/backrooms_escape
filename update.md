@@ -6,6 +6,7 @@
 - 新增 `dialog_model` 配置项（config.py / config.toml），指定角色对话模式使用的 LLM 任务名
 - 所有对话 LLM 调用（开场白、正常回复、告别语）均传入 `model=dialog_model`，绕过 Planner 直达指定模型
 - 新增 `/br say <对话内容>` 命令，在对话模式下直接将内容传给 LLM 生成角色回复，无需依赖消息拦截钩子
+- 新增 `strip_cot()` 函数，剥离 LLM 回复中的思维链（CoT）推理标记（如 `<commentary>`、`<thought>`、`[Advisor consultation]` 等），仅保留纯净角色回复
 
 ### 变更
 - `/br say` 命令从"随机名言"改为"对话模式输入"，删除名人名言池 `FAMOUS_QUOTES` 列表和 `_do_say` 方法

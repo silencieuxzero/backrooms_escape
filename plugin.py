@@ -29,6 +29,7 @@ from .renderer import (
     build_message_list,
     trim_history,
     is_end_dialog,
+    strip_cot,
     StoryManager,
     PeopleStoryManager,
     QuestManager,
@@ -2526,7 +2527,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         try:
             result = await self.ctx.llm.generate(prompt=messages, model=self.config.game.dialog_model or "replyer")
             if result.get("success"):
-                reply = result.get("response", "").strip()
+                reply = strip_cot(result.get("response", ""))
                 if reply:
                     # 保存到对话历史
                     player.dialog_history.append({"role": "assistant", "content": reply})
@@ -2565,7 +2566,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             farewell_messages = build_message_list(system_prompt, farewell_history, f"{char_name}突然有急事要离开，自然地告别。")
             result = await self.ctx.llm.generate(prompt=farewell_messages, model=self.config.game.dialog_model or "replyer")
             if result.get("success"):
-                farewell_text = result.get("response", "").strip()
+                farewell_text = strip_cot(result.get("response", ""))
         except Exception as exc:
             self.ctx.logger.error("自动告别 LLM 生成失败: %s", exc)
 
@@ -2616,7 +2617,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
             try:
                 result = await self.ctx.llm.generate(prompt=farewell_messages, model=self.config.game.dialog_model or "replyer")
                 if result.get("success"):
-                    farewell_text = result.get("response", "").strip()
+                    farewell_text = strip_cot(result.get("response", ""))
             except Exception:
                 pass
 
@@ -2638,7 +2639,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         try:
             result = await self.ctx.llm.generate(prompt=messages, model=self.config.game.dialog_model or "replyer")
             if result.get("success"):
-                reply = result.get("response", "").strip()
+                reply = strip_cot(result.get("response", ""))
                 if reply:
                     player.dialog_history.append({"role": "assistant", "content": reply})
                     player.dialog_history = trim_history(player.dialog_history)

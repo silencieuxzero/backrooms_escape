@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re as _re
 from typing import Any
 
 from .people_manage import CHARACTERS
@@ -104,3 +105,49 @@ def trim_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
 def is_end_dialog(text: str) -> bool:
     """检查玩家是否输入了结束对话的指令。"""
     return text.strip() in END_DIALOG_KEYWORDS
+
+
+# ==================== 回复后处理 ====================
+
+
+# 思维链标签正则模式 — 匹配 XML/特殊标记包裹的推理内容
+# 覆盖常见模型格式：DeepSeek R1、Qwen、通用 CoT、中文推理标记、Advisor 等
+_COT_PATTERNS: list[tuple[str, int]] = [
+    # ===== 通用推理标记 =====
+    #  <think>...</think>  /  <THINK>...</THINK>
+    (r"<think>.*?</think>", _re.IGNORECASE | _re.DOTALL),
+    #  <reason>...</reason>  /  <REASON>...</REASON>
+    (r"<reason>.*?</reason>", _re.IGNORECASE | _re.DOTALL),
+    #  【思考】...</思考>  /  [思考]...[/思考]
+    (r"\[/?思考\]", 0),
+    #  【推理】...</推理>  /  [推理]...[/推理]
+    (r"\[/?推理\]", 0),
+    # ===== DeepSeek R1 风格 =====
+    #   ...  内的推理块
+    (r"```.*?```", _re.DOTALL),
+    # ===== Advisor / Step-Router 风格 =====
+    #  [Advisor consultation #N] ... [End of advisor consultation #N]
+    (r"\[Advisor consultation[^\]]*\].*?\[End of advisor consultation[^\]]*\]", _re.DOTALL),
+    #  <commentary>...</commentary>
+    (r"<commentary>.*?</commentary>", _re.DOTALL),
+    #  <action>...</action>
+    (r"<action>.*?</action>", _re.DOTALL),
+    #  <thought>...</thought>
+    (r"<thought>.*?</thought>", _re.DOTALL),
+    #  [Advisor review] 单行标记
+    (r"\[Advisor review\]", 0),
+]
+
+
+def strip_cot(text: str) -> str:
+    """剥离 LLM 回复中的思维链（Chain-of-Thought）推理内容。
+
+    某些模型会将内部推理过程作为 XML/特殊标记嵌入回复文本中，
+    此函数将其移除，只保留最终回复内容。
+    """
+    result = text
+    for pattern, flags in _COT_PATTERNS:
+        result = _re.sub(pattern, "", result, flags=flags)
+    # 清理多余空行
+    result = _re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
