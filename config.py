@@ -221,10 +221,10 @@ class GameConfig(PluginConfigBase):
     # ---- 对话模型配置 ----
     dialog_model: str = Field(
         default="",
-        description="角色对话使用的 LLM 模型名称（需是麦麦已注册的模型名），留空则使用 replyer（回复模型）",
+        description="角色对话使用的 LLM 任务名（需是麦麦已注册的 task 名），留空则使用 replyer（回复任务）",
         json_schema_extra={
-            "label": "对话模型",
-            "hint": "角色对话使用的 LLM 模型名称，需是麦麦已注册的模型。留空则默认使用 replyer（回复模型）。",
+            "label": "对话任务",
+            "hint": "角色对话使用的 LLM 任务名（如 replyer），需是麦麦 model_config.toml 中已注册的 task 名。留空则默认使用 replyer（回复任务）。",
             "order": 22,
         },
     )

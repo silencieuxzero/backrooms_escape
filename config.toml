@@ -34,8 +34,8 @@ favorability_per_encounter = 2
 gift_favorability_values = {o1 = 5, o2 = 5, o3 = 5, o4 = 5, o5 = 5, o6 = 5, o7 = 5}
 
 # ---- 对话模型配置 ----
-# 角色对话使用的 LLM 模型名称（需是麦麦已有的模型名），留空则默认使用 replyer（回复模型）
-dialog_model = "step-router-v1"
+# 角色对话使用的 LLM 任务名（需是麦麦已注册的 task 名），留空则默认使用 replyer（回复任务）
+dialog_model = ""
 
 # ---- 物资箱概率 ----
 # 触发补给事件时各类物资箱的出现概率
