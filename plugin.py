@@ -268,6 +268,25 @@ EXPLORE_EVENTS = [
     {"type": "found_note", "text": "你在墙角发现了一张泛黄的纸条，上面似乎写着什么……"},
 ]
 
+# ── Alpha 基地探索事件 ──
+# 仅在 Level 1 使用 /br explore base 时触发
+BASE_EXPLORE_EVENTS = [
+    {"area": "休息区", "text": "你走进 Alpha 基地的休息区。几盏暖黄色的灯照亮了摆放着旧沙发和折叠椅的角落，墙上的公告板贴满了便签和手绘地图。空气中弥漫着速溶咖啡的味道。", "type": "neutral"},
+    {"area": "通讯室", "text": "通讯室里设备嗡嗡作响。一名操作员正戴着耳机调试频率，屏幕上跳动着信号波形图。角落里堆着几台待修的无线电设备。", "type": "neutral"},
+    {"area": "工程部", "text": "工程部的门半掩着，里面传来工具碰撞的清脆声响。工作台上散落着拆开的零件和电路板，墙上挂满了各种手工改造的工具。", "type": "neutral"},
+    {"area": "食堂", "text": "食堂里，薛师傅正往大锅里倒着什么。几个探员围坐在简易餐桌旁，低声交流着各楼层的见闻。后室的罐头食品虽然乏味，但在这片混乱中能有一口热乎的已属不易。", "type": "discovery"},
+    {"area": "仓库", "text": "仓库里整齐地码放着物资箱——杏仁水、急救包、手电筒电池。管理员正在清点库存，看到你进来点了点头。", "type": "discovery"},
+    {"area": "档案室", "text": "档案室里弥漫着旧纸和灰尘的气味。铁皮柜里分类存放着各楼层的探索记录、实体观察报告和已知出口坐标。你在翻阅时发现了一些有趣的信息。", "type": "discovery", "info_gain": True},
+    {"area": "医疗站", "text": "医疗站的灯光比基地其他地方都要亮一些。简易的床位上躺着一名刚从前线回来的伤员，医护人员正在为他包扎伤口。", "type": "neutral"},
+    {"area": "训练场", "text": "训练场上，几名新人在进行模拟逃生演练。一名教官正在大声强调着后室生存的基本原则——「永远不要背对黑暗。」", "type": "neutral"},
+    {"area": "休息区", "text": "休息区里，有人在弹一把走了音的旧吉他。虽然音准不对，但那旋律在这样的环境里却出奇地让人安心。", "type": "neutral"},
+    {"area": "通讯室", "text": "你路过通讯室时，正好收到一段来自 Level 5 的加密信号。操作员表示解码后会交给信息分析组处理。", "type": "discovery", "info_gain": True},
+    {"area": "工程部", "text": "安继年不在工程部，但工作台上留着一张字条——「去北区修管道了，扳手别动。」旁边还放着一个简易的应急灯。", "type": "discovery", "give_item": True},
+    {"area": "食堂", "text": "食堂今天开了一箱宝贵的调味料。薛师傅心情不错，给每个人多加了一勺酱料——虽然不知道是什么做的，但至少让罐头有了些滋味。", "type": "neutral"},
+    {"area": "仓库", "text": "仓库管理员正在整理新到的一批物资。他看到你后把你叫住，递给你一小瓶杏仁水——「路上小心，新人。」", "type": "discovery", "give_item": True},
+    {"area": "档案室", "text": "你在档案室找到了一份旧日志，记录着 M.E.G.CN 刚建立 Alpha 基地时的艰难岁月。日志的作者用平淡的语气描述了最初那批人如何在 Level 1 扎下了根。", "type": "discovery", "info_gain": True},
+]
+
 # 捷径楼层
 SHORTCUT_POOL = [
     {"levels_skip": (5, 15), "description": "你发现了一部还能运转的电梯，它带你穿过了多个楼层！"},
@@ -517,6 +536,17 @@ class BackroomsGamePlugin(MaiBotPlugin):
         stream_id = kwargs.get("stream_id", "")
         await self._do_start(stream_id)
         return True, "新游戏已开始", 1
+
+    @Command(
+        "br_explore_base",
+        description="在 Alpha 基地内探索 — 发现基地场景并遇到不同人物",
+        pattern=r"^/br\s+explore\s+base$",
+    )
+    async def handle_explore_base(self, **kwargs: Any):
+        """在 Alpha 基地内探索。"""
+        stream_id = kwargs.get("stream_id", "")
+        await self._do_explore_base(stream_id)
+        return True, "基地探索完成", 1
 
     @Command(
         "br_explore",
@@ -1702,6 +1732,72 @@ class BackroomsGamePlugin(MaiBotPlugin):
             ctx, event_text, crate_result, health_cost,
             note_found, entity_encounter, char_encounter,
             work_triggered, work_assigned, companion=player.companion,
+        )
+        await self._send_game_event(stream_id, event_text, player)
+        self._save_player(user_id)
+
+    async def _do_explore_base(self, stream_id: str) -> None:
+        """在 Alpha 基地内探索，遇见不同人物与场景。"""
+        user_id = str(stream_id)
+        player = self._get_player(user_id)
+        if not player or not player.fsm.is_playable():
+            await self._send(stream_id, self._renderer.render_not_started())
+            return
+        await self._auto_end_dialog(stream_id, player)
+
+        if player.current_level != 1:
+            await self._send(stream_id, "⚠️ 你不在 Alpha 基地，无法使用基地探索命令。")
+            return
+
+        if player.current_level == 399:
+            await self._send(stream_id, self._renderer.render_already_at_399())
+            return
+
+        cfg = self.config.game
+        # 基地探索只消耗 1 点理智（比常规探索安全）
+        player.sanity = max(0, player.sanity - 1)
+
+        # 随机基地事件
+        event = random.choice(BASE_EXPLORE_EVENTS)
+        event_area = event["area"]
+        event_text = event["text"]
+        item_gained: dict | None = None
+
+        if event.get("give_item"):
+            # 给予随机物品
+            item = self._random_item()
+            player.inventory.append(dict(item))
+            item_gained = item
+
+        # 角色遭遇（使用现有系统）
+        char_encounter: tuple[str, str, str | None, str | None, int, int] | None = None
+        result = self._char_encounter_service.roll_encounter(
+            level=player.current_level,
+            unlocked_chars=player.unlocked_chars,
+            player_state=player,
+            people_story_manager=self._people_manager,
+            quest_manager=self._quest_manager,
+            ankexin_task_chance=cfg.ankexin_task_chance,
+            favorability_per_encounter=cfg.favorability_per_encounter,
+            consecutive_misses=player.consecutive_misses,
+        )
+        if result is not None:
+            char_encounter = (
+                result.char_id, result.story_text,
+                result.gift_text, result.quest_offer,
+                result.favorability_increase, result.current_favorability,
+            )
+            player.consecutive_misses = 0
+        else:
+            player.consecutive_misses += 1
+
+        # 理智值过低效果
+        if player.sanity <= 0:
+            player.health = max(0, player.health - 10)
+
+        ctx = self._make_ctx(player)
+        event_text = self._renderer.render_explore_base(
+            ctx, event_area, event_text, item_gained, char_encounter,
         )
         await self._send_game_event(stream_id, event_text, player)
         self._save_player(user_id)

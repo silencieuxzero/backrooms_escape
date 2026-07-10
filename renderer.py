@@ -314,8 +314,8 @@ class BackroomsRenderer:
 
         lines.append(f"\n{self.status_bar(ctx)}")
 
-        # 基地工作提示
-        if work_triggered:
+        # 基地工作提示（仅 Level 1 Alpha 基地有效）
+        if work_triggered and ctx.current_level == 1:
             lines.append("🏢 Alpha 基地有新工作可接！使用 /br work 查看工作面板。")
 
         # 安可欣主动派发日常工作任务
@@ -373,6 +373,78 @@ class BackroomsRenderer:
             lines.extend(self.next_step_hint(
                 ctx.current_level, ctx.sanity, ctx.health, ctx.initial_health,
             ))
+
+        return "\n".join(lines)
+
+    def render_explore_base(
+        self,
+        ctx: RenderContext,
+        event_area: str,
+        event_text: str,
+        item_gained: dict | None = None,
+        char_encounter: tuple[str, str, str | None, str | None, int, int] | None = None,
+    ) -> str:
+        """Alpha 基地探索结果消息。
+
+        Args:
+            ctx: 渲染上下文。
+            event_area: 探索的区域名称。
+            event_text: 探索事件文本。
+            item_gained: 获得的物品，None 表示无物品。
+            char_encounter: (角色ID, 剧情文本, 赠送文本, 任务ID, 好感度增量, 当前好感度) 或 None。
+        """
+        lines = ["🏢 你在 Alpha 基地中漫步……"]
+        lines.append("")
+        lines.append(f"📍 {event_area}")
+        lines.append("")
+        lines.append(event_text)
+
+        if item_gained:
+            display = item_gained.get("display_name", item_gained["name"])
+            lines.append("")
+            lines.append(f"🎒 获得：【{display}】— {item_gained['description']}")
+
+        # 角色遭遇
+        if char_encounter:
+            char_id, story_text, char_gift, quest_offer, fav_inc, fav_current = char_encounter
+            char_info = CHARACTERS.get(char_id, {})
+            char_name = char_info.get("name", char_id)
+            lines.append("")
+            lines.append(f"═════ 你在基地遇到了 {char_name} ═════")
+            lines.append("")
+            lines.append(story_text)
+            lines.append("")
+            lines.append("═══════════════════════════════════")
+            if char_gift:
+                lines.append(char_gift)
+            if quest_offer:
+                giver_name = char_info.get("name", char_id)
+                lines.append(f"\n📋 {giver_name}给你布置了一个新任务！")
+                lines.append(f"使用 /br quest accept {quest_offer} 接受任务，或 /br quest 查看详情。")
+            if fav_inc > 0:
+                lines.append(f"\n💝 好感度 +{fav_inc}（当前 {fav_current}）")
+
+        # 理智值过低
+        warn = self.low_sanity_warning(ctx.sanity)
+        if warn:
+            lines.append("")
+            lines.append(warn)
+
+        if ctx.sanity <= 0:
+            lines.append("💀 理智值耗尽，你的精神崩溃了！生命值额外减少了 10 点。")
+
+        # 死亡
+        if ctx.health <= 0:
+            lines.append(self._death_message())
+
+        lines.append("")
+        lines.append(self.status_bar(ctx))
+
+        # 引导
+        if ctx.health > 0:
+            hints = self.next_step_hint(ctx.current_level, ctx.sanity, ctx.health, ctx.initial_health)
+            for h in hints:
+                lines.append(h)
 
         return "\n".join(lines)
 
@@ -526,7 +598,8 @@ class BackroomsRenderer:
             "  /br story    — 故事档案（/br story 查看列表 / <ID> 查看详情）\n"
             "  /br test      — 测试插件连通性（验证插件是否正常）\n"
             "  /br start     — 开始新游戏\n"
-            "  /br explore    — 探索当前楼层（消耗2理智，可能遇敌/发现物品/捡到纸条）\n"
+            "  /br explore     — 探索当前楼层（消耗2理智，可能遇敌/发现物品/捡到纸条）\n"
+            "  /br explore base — 在 Alpha 基地内探索（消耗1理智，偶遇基地人物）\n"
             "  /br exit       — 尝试寻找出口（消耗5理智，每次失败增加成功概率）\n"
             "  /br read       — 阅读捡到的纸条（通过合并转发消息展示）\n"
             "  /br status     — 查看探员状态\n"
@@ -720,7 +793,8 @@ class BackroomsRenderer:
             )
         return (
             "📋 可用命令：\n\n"
-            "  /br explore    — 探索当前楼层\n"
+            "  /br explore     — 探索当前楼层\n"
+            "  /br explore base — 在 Alpha 基地内探索（偶遇人物）\n"
             "  /br exit      — 尝试寻找出口\n"
             "  /br exit l<N>  — 回溯到已访问的楼层\n"
             "  /br use <编号> — 使用物品\n"
