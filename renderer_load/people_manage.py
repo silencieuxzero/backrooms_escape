@@ -116,7 +116,7 @@ class CharacterEncounterService:
         people_story_manager: Any,
         quest_manager: Any,
         ankexin_task_chance: float,
-        favorability_per_encounter: int = 10,
+        favorability_per_encounter: int = 2,
         consecutive_misses: int = 0,
     ) -> EncounterResult | None:
         """掷骰判定当前楼层是否发生角色遭遇。
@@ -177,7 +177,7 @@ class CharacterEncounterService:
         people_story_manager: Any,
         quest_manager: Any,
         ankexin_task_chance: float,
-        favorability_per_encounter: int = 10,
+        favorability_per_encounter: int = 2,
     ) -> EncounterResult | None:
         story_text = people_story_manager.get_first_story(char_id)
         if not story_text:
@@ -220,7 +220,7 @@ class CharacterEncounterService:
         people_story_manager: Any,
         quest_manager: Any,
         ankexin_task_chance: float,
-        favorability_per_encounter: int = 10,
+        favorability_per_encounter: int = 2,
     ) -> EncounterResult | None:
         story_text = people_story_manager.get_random_routine(char_id)
         if not story_text:

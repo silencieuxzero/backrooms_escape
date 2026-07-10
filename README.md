@@ -126,7 +126,7 @@ user_ids = ["你的QQ号"]
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `favorability_threshold` | 70 | 邀请角色同行所需的最低好感度 |
-| `favorability_per_encounter` | 10 | 每次遭遇角色时自动增加的好感度 |
+| `favorability_per_encounter` | 2 | 每次遭遇角色时自动增加的好感度 |
 | `gift_favorability_values` | 见配置 | 赠礼好感度映射，键为物品代码（如 `o4`），值为增加的好感度 |
 
 ## 存档

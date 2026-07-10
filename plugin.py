@@ -780,7 +780,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
     @Command(
         "br_invite",
         description="邀请角色同行 — 好感度达标后可邀请角色一起探索后室",
-        pattern=r"^/br\s+invite\s+(\S+)",
+        pattern=r"^/br\s+invite\s+([\u4e00-\u9fffA-Za-z]+)",
     )
     async def handle_invite(self, **kwargs: Any):
         """邀请角色一起探索。"""
@@ -792,9 +792,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
             or message.get("message")
             or ""
         )
-        m = re.search(r"/br\s+invite\s+(\S+)", raw_text)
+        m = re.search(r"/br\s+invite\s+([\u4e00-\u9fffA-Za-z]+)", raw_text)
         if m:
-            await self._do_invite(stream_id, m.group(1).strip().lower())
+            await self._do_invite(stream_id, m.group(1).lower())
         return True, "邀请处理完成", 1
 
     @Command(
@@ -811,7 +811,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
     @Command(
         "br_gift",
         description="赠送礼物 — 将背包物品赠送给角色提升好感度",
-        pattern=r"^/br\s+gift\s+(\S+)\s+(\d+)",
+        pattern=r"^/br\s+gift\s+([\u4e00-\u9fffA-Za-z]+)\s+(\d+)",
     )
     async def handle_gift(self, **kwargs: Any):
         """赠送礼物给角色。"""
@@ -823,9 +823,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
             or message.get("message")
             or ""
         )
-        m = re.search(r"/br\s+gift\s+(\S+)\s+(\d+)", raw_text)
+        m = re.search(r"/br\s+gift\s+([\u4e00-\u9fffA-Za-z]+)\s+(\d+)", raw_text)
         if m:
-            char_name = m.group(1).strip().lower()
+            char_name = m.group(1).lower()
             item_index = int(m.group(2))
             await self._do_gift(stream_id, char_name, item_index)
         return True, "赠礼处理完成", 1
@@ -835,7 +835,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
     @Command(
         "br_said",
         description="对话 — 与指定角色进入对话模式",
-        pattern=r"^/br\s+said\s+(\S+)",
+        pattern=r"^/br\s+said\s+([\u4e00-\u9fffA-Za-z]+)",
     )
     async def handle_said(self, **kwargs: Any):
         """与指定角色进入对话模式。"""
@@ -847,9 +847,9 @@ class BackroomsGamePlugin(MaiBotPlugin):
             or message.get("message")
             or ""
         )
-        m = re.search(r"/br\s+said\s+(\S+)", raw_text)
+        m = re.search(r"/br\s+said\s+([\u4e00-\u9fffA-Za-z]+)", raw_text)
         if m:
-            await self._do_said(stream_id, m.group(1).strip())
+            await self._do_said(stream_id, m.group(1))
         return True, "对话模式处理完成", 1
 
     # ==================== 访问控制拦截 ====================
@@ -2308,7 +2308,12 @@ class BackroomsGamePlugin(MaiBotPlugin):
         elif char_name in name_to_id:
             char_id = name_to_id[char_name]
         else:
-            await self._send(stream_id, f"❌ 不认识「{char_name}」，可邀请的角色：安可欣、安继年、白宇、Luna、洛疏律、夏终")
+            available = "、".join(
+                CHARACTERS[cid]["name"]
+                for cid in player.unlocked_chars
+                if cid in CHARACTERS
+            ) or "无"
+            await self._send(stream_id, f"❌ 不认识「{char_name}」，可邀请的角色：{available}")
             return
 
         char_meta = CHARACTERS.get(char_id)
@@ -2398,7 +2403,12 @@ class BackroomsGamePlugin(MaiBotPlugin):
         elif char_input in name_to_id:
             char_id = name_to_id[char_input]
         else:
-            await self._send(stream_id, f"❌ 不认识「{char_input}」，可对话的角色：安可欣、安继年、白宇、Luna、洛疏律、夏终")
+            available = "、".join(
+                CHARACTERS[cid]["name"]
+                for cid in player.unlocked_chars
+                if cid in CHARACTERS
+            ) or "无"
+            await self._send(stream_id, f"❌ 不认识「{char_input}」，可对话的角色：{available}")
             return
 
         char_meta = CHARACTERS.get(char_id)
@@ -2577,7 +2587,12 @@ class BackroomsGamePlugin(MaiBotPlugin):
         elif char_name in name_to_id:
             char_id = name_to_id[char_name]
         else:
-            await self._send(stream_id, f"❌ 不认识「{char_name}」，可赠送的角色：安可欣、安继年、白宇、Luna、洛疏律、夏终")
+            available = "、".join(
+                CHARACTERS[cid]["name"]
+                for cid in player.unlocked_chars
+                if cid in CHARACTERS
+            ) or "无"
+            await self._send(stream_id, f"❌ 不认识「{char_name}」，可赠送的角色：{available}")
             return
 
         char_meta = CHARACTERS.get(char_id)

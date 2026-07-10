@@ -190,7 +190,7 @@ class GameConfig(PluginConfigBase):
         },
     )
     favorability_per_encounter: int = Field(
-        default=10,
+        default=2,
         description="每次在 Level 1 遇到角色时增加的好感度",
         json_schema_extra={
             "label": "单次遭遇好感度",
@@ -204,9 +204,9 @@ class GameConfig(PluginConfigBase):
         default_factory=lambda: {
             "o1": 5,
             "o2": 5,
-            "o3": 10,
-            "o4": 25,
-            "o5": 15,
+            "o3": 5,
+            "o4": 5,
+            "o5": 5,
             "o6": 5,
             "o7": 5,
         },

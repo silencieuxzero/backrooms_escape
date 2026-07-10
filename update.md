@@ -9,7 +9,8 @@
 - 修复 `plugin.py` 中 docstring 错别字"检到"→"捡到"
 - `_lookup_item` 参数名 `item_id` 统一为 `item_name`，消除命名与实现的不一致
 - `ShutManager.remove_shut` 中 `discard()` 改为 `remove()`，与前置 `if not in` 守卫语义一致
-- `cards.py` 中 `import base64` 移至文件顶部，符合导入规范
+- `/br said`、`/br invite`、`/br gift` 命令正则从 `(\S+)` 改为只匹配中文/字母字符，避免捕获 `'}]` 等消息格式杂音
+- `/br said`、`/br invite`、`/br gift` 错误提示中的角色列表改为从 `player.unlocked_chars` 动态生成，只显示玩家已解锁的角色
 
 ## v1.1.2 (2026-07-09)
 

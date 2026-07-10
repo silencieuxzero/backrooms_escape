@@ -27,6 +27,12 @@ ankexin_task_chance = 0.5
 # 在 Level 1 每探索多少次触发一次安可欣的日常工作任务（默认 10）
 work_trigger_interval = 10
 
+# ---- 好感度配置 ----
+# 每次遇到角色时增加的好感度（默认 2）
+favorability_per_encounter = 2
+# 各物品赠礼好感度值（键为物品代码，值为好感度）
+gift_favorability_values = {o1 = 5, o2 = 5, o3 = 5, o4 = 5, o5 = 5, o6 = 5, o7 = 5}
+
 # ---- 物资箱概率 ----
 # 触发补给事件时各类物资箱的出现概率
 # 大型箱：必出杏仁水；中型箱：必出杏仁水；小型箱：必出杏仁水
