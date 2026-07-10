@@ -1,5 +1,10 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.1.5 (2026-07-10)
+
+### 修复
+- 移除 `_send_game_event` 中未使用的冗余变量 `companion_name`
+
 ## v1.1.4 (2026-07-10)
 
 ### 重构

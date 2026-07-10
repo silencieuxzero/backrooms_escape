@@ -71,10 +71,10 @@ _load_backrooms_data()
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.1.4"
+PLUGIN_VERSION = "1.1.5"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.1.4"
+SAVE_VERSION = "1.1.5"
 """存档数据格式版本号，用于存档迁移兼容。"""
 
 
@@ -1426,12 +1426,6 @@ class BackroomsGamePlugin(MaiBotPlugin):
             player: 玩家状态对象。
         """
         ctx = self._make_ctx(player)
-        companion_name = None
-        if player.companions:
-            companion_name = "、".join(
-                CHARACTERS.get(cid, {}).get("name", cid)
-                for cid in player.companions
-            )
 
         status_text = self._renderer.render_status_panel(
             ctx,
