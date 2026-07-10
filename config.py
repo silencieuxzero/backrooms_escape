@@ -218,6 +218,17 @@ class GameConfig(PluginConfigBase):
         },
     )
 
+    # ---- 对话模型配置 ----
+    dialog_model: str = Field(
+        default="",
+        description="角色对话使用的 LLM 模型名称（需是麦麦已注册的模型名），留空则使用 replyer（回复模型）",
+        json_schema_extra={
+            "label": "对话模型",
+            "hint": "角色对话使用的 LLM 模型名称，需是麦麦已注册的模型。留空则默认使用 replyer（回复模型）。",
+            "order": 22,
+        },
+    )
+
     # ---- 各物品获取权重（权重越高，获得概率越大） ----
     item_weight_o1: int = Field(
         default=3,

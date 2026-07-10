@@ -2525,7 +2525,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         messages = build_message_list(system_prompt, [], f"{char_name}遇到了玩家，打一声招呼开始对话吧。")
 
         try:
-            result = await self.ctx.llm.generate(prompt=messages)
+            result = await self.ctx.llm.generate(prompt=messages, model=self.config.game.dialog_model or "replyer")
             if result.get("success"):
                 reply = result.get("response", "").strip()
                 if reply:
@@ -2564,7 +2564,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
                 {"role": "user", "content": f"{char_name}，我有事要先走了。"}
             ]
             farewell_messages = build_message_list(system_prompt, farewell_history, f"{char_name}突然有急事要离开，自然地告别。")
-            result = await self.ctx.llm.generate(prompt=farewell_messages)
+            result = await self.ctx.llm.generate(prompt=farewell_messages, model=self.config.game.dialog_model or "replyer")
             if result.get("success"):
                 farewell_text = result.get("response", "").strip()
         except Exception as exc:
@@ -2615,7 +2615,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
             farewell_text = ""
             try:
-                result = await self.ctx.llm.generate(prompt=farewell_messages)
+                result = await self.ctx.llm.generate(prompt=farewell_messages, model=self.config.game.dialog_model or "replyer")
                 if result.get("success"):
                     farewell_text = result.get("response", "").strip()
             except Exception:
@@ -2637,7 +2637,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._save_player(user_id)
 
         try:
-            result = await self.ctx.llm.generate(prompt=messages)
+            result = await self.ctx.llm.generate(prompt=messages, model=self.config.game.dialog_model or "replyer")
             if result.get("success"):
                 reply = result.get("response", "").strip()
                 if reply:

@@ -2,6 +2,14 @@
 
 ## v1.1.5 (2026-07-10)
 
+### 新增
+- 新增 `dialog_model` 配置项（config.py / config.toml），指定角色对话模式使用的 LLM 模型
+- 所有对话 LLM 调用（开场白、正常回复、告别语）均传入 `model=dialog_model`，绕过 Planner 直达指定模型
+
+### 变更
+- 配置默认值：`dialog_model = ""` 时自动回退为 `"replyer"`（回复模型）
+- `_manifest.json` 能力声明保留 `llm.generate`
+
 ### 修复
 - 移除 `_send_game_event` 中未使用的冗余变量 `companion_name`
 
