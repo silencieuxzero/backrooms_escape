@@ -143,7 +143,7 @@ user_ids = ["你的QQ号"]
 
 ```
 backrooms_escape/
-├── plugin.py                  # 插件主入口 — 命令注册、Hook、生命周期
+├── plugin.py                  # 插件主入口 — 命令注册、Hook、生命周期（~570行）
 ├── renderer.py                # 向后兼容层（透出各层公开符号）
 ├── config.py / config.toml    # Pydantic 配置模型 + 运行时配置
 │
@@ -153,6 +153,22 @@ backrooms_escape/
 │   ├── game_data.py           #   游戏静态数据 + GameDataService
 │   ├── exploration.py         #   ExplorationService（探索逻辑）
 │   └── exit_handler.py        #   ExitService（出口/回溯逻辑）
+│
+├── handlers/                  # 命令处理混入层（_do_* 方法按功能拆分）
+│   ├── base.py                #   HandlerBase — 共享工具方法
+│   ├── game_commands.py       #   GameCommandMixin — 开始/探索/使用物品
+│   ├── exit_commands.py       #   ExitCommandMixin — 出口搜索/楼层回溯
+│   ├── player_commands.py     #   PlayerCommandMixin — 查看状态/背包/帮助
+│   ├── story_commands.py      #   StoryCommandMixin — 故事档案
+│   ├── quest_commands.py      #   QuestCommandMixin — 任务系统
+│   ├── work_commands.py       #   WorkCommandMixin — 基地工作
+│   ├── character_commands.py  #   CharacterCommandMixin — 关系图/LLM对话
+│   ├── companion_commands.py  #   CompanionCommandMixin — 同伴同行/赠礼
+│   └── admin_commands.py      #   AdminCommandMixin — 管理员命令
+│
+├── hooks/                     # Hook 处理器
+│   ├── access_control.py      #   黑白名单 + 插件禁用检查
+│   └── message_hooks.py       #   Planner 跳过 / 对话拦截 / 静默检查
 │
 ├── rendering/                 # 渲染层（纯函数，无副作用）
 │   ├── renderer.py            #   BackroomsRenderer（所有消息格式化）
@@ -181,6 +197,9 @@ backrooms_escape/
 
 ```
 plugin.py
+  ├── handlers/       (命令 _do_* 方法，按功能领域拆分为混入类)
+  │     └── handlers/base.py  (共享工具方法)
+  ├── hooks/          (Hook 处理逻辑)
   ├── core/           (GameState, PlayerState, GameDataService, ...)
   ├── rendering/      (BackroomsRenderer, RenderContext, companion_lines)
   │     └── story_load/  (via rendering/__init__.py)

@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
-SAVE_VERSION = "1.2.0"
+SAVE_VERSION = "1.2.1"
 """存档数据格式版本号，与 plugin.py 中的 SAVE_VERSION 保持同步。"""
 
 if TYPE_CHECKING:

@@ -1,5 +1,19 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.2.1 (2026-07-19)
+
+### 重构
+- **plugin.py 第二轮拆分**：原 2392 行文件中的命令实现与 Hook 逻辑进一步解耦
+  - 新增 `handlers/` 命令处理混入层，按功能领域拆分为 9 个独立文件：`base.py`（共享工具方法 370 行）、`game_commands.py`（游戏流程 235 行）、`exit_commands.py`（出口处理 191 行）、`player_commands.py`（玩家状态 65 行）、`character_commands.py`（LLM 对话 171 行）、`companion_commands.py`（同伴/赠礼 162 行）、`quest_commands.py`（任务系统 87 行）、`work_commands.py`（基地工作 78 行）、`story_commands.py`（故事档案 43 行）、`admin_commands.py`（管理命令 60 行）
+  - 新增 `hooks/` Hook 处理层：`access_control.py`（黑白名单 + 禁用检查 71 行）、`message_hooks.py`（Planner 跳过/对话拦截/静默检查 52 行）
+  - `plugin.py` 精简至 570 行，`@Command` 和 `@HookHandler` 方法改为薄封装层，实际逻辑委托给 `handlers/` 混入类和 `hooks/` 处理函数
+- **混入模式**：`BackroomsGamePlugin` 通过多重继承组合 9 个混入类，Python MRO 线性化保证方法解析正确，零循环依赖
+- **模块边界清晰**：`handlers/` → `core/` / `rendering/`；`hooks/` 接收 plugin 实例为参数，不做模块级导入
+
+### 变更
+- `AGENTS.md` 架构图更新：新增 `handlers/` 和 `hooks/` 目录说明、依赖关系细化、常见任务速查表扩展
+- 约束文档新增：新增 `handlers/` 混入类和 `hooks/` 处理函数的导出规则
+
 ## v1.2.0 (2026-07-19)
 
 ### 重构

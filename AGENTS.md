@@ -22,7 +22,7 @@ MaiBot 文字冒险插件。玩家扮演 M.E.G.CN 工作人员，从 Level 0 出
 
 ```
 backrooms_escape/
-├── plugin.py                   # 主入口：命令注册、Hook、生命周期（~2400行）
+├── plugin.py                   # 主入口：命令注册、Hook、生命周期（~570行）
 ├── config.py / config.toml     # Pydantic 配置模型 + 运行时配置
 ├── _manifest.json              # 插件清单
 ├── update.md                   # 版本更新日志
@@ -35,6 +35,24 @@ backrooms_escape/
 │   ├── game_data.py            # 静态数据（楼层/事件/捷径）+ 物品加载 + GameDataService
 │   ├── exploration.py          # ExplorationService（楼层/基地探索）
 │   └── exit_handler.py         # ExitService（出口搜索/楼层回溯）
+│
+├── handlers/                   # 命令处理混入层（将 _do_* 方法按功能领域拆分）
+│   ├── __init__.py             # 统一导出所有混入类
+│   ├── base.py                 # HandlerBase — 共享工具方法（消息解析/发送/物品管理）
+│   ├── game_commands.py        # GameCommandMixin — 游戏流程（开始/探索/使用物品）
+│   ├── exit_commands.py        # ExitCommandMixin — 出口搜索与楼层回溯
+│   ├── player_commands.py      # PlayerCommandMixin — 玩家状态（查看/背包/帮助）
+│   ├── story_commands.py       # StoryCommandMixin — 故事档案
+│   ├── quest_commands.py       # QuestCommandMixin — 任务系统
+│   ├── work_commands.py        # WorkCommandMixin — 基地工作
+│   ├── character_commands.py   # CharacterCommandMixin — 角色交互（关系图/LLM对话）
+│   ├── companion_commands.py   # CompanionCommandMixin — 同伴同行与赠礼
+│   └── admin_commands.py       # AdminCommandMixin — 管理员命令
+│
+├── hooks/                      # Hook 处理器（访问控制/消息拦截）
+│   ├── __init__.py             # 统一导出
+│   ├── access_control.py       # 黑白名单 + 插件禁用检查
+│   └── message_hooks.py        # Planner 跳过 / 对话拦截 / 静默检查
 │
 ├── rendering/                  # 渲染层（纯函数，无副作用）
 │   ├── __init__.py             # 统一导出 + 透出 story_load 模块
@@ -64,6 +82,9 @@ backrooms_escape/
 
 ```
 plugin.py
+  ├── handlers/       (命令 _do_* 方法，按功能领域拆分为混入类)
+  │     └── handlers/base.py  (共享工具方法)
+  ├── hooks/          (Hook 处理逻辑)
   ├── core/           (GameState, PlayerState, GameDataService, ExplorationService, ExitService)
   ├── rendering/      (BackroomsRenderer, RenderContext, companion_lines)
   │     └── story_load/  (via rendering/__init__.py)
@@ -72,7 +93,9 @@ plugin.py
 ```
 
 **层级原则**：
-- `plugin.py` 是唯一的编排层，负责命令注册和 SDK 交互。
+- `plugin.py` 是唯一的编排层，负责命令注册和 SDK 交互，通过多重继承组合 handlers/ 中的混入类。
+- `handlers/` 为命令处理混入层，每个文件专注于一类游戏功能的 ``_do_*`` 实现。
+- `hooks/` 为 Hook 处理层，以独立函数形式实现，通过 ``plugin.py`` 委托调用。
 - `core/` 为纯业务逻辑层，不依赖 SDK，通过 `plugin_ref` 访问配置/日志。
 - `rendering/` 为纯函数渲染层，不依赖 SDK、无副作用、不访问网络。
 - `story_load/` 为静态数据管理层，管理故事文本、角色注册表等。
@@ -81,7 +104,9 @@ plugin.py
 
 ### 导入规则
 
-- `plugin.py` 从 `core/`、`rendering/`、`persistence/` 直接导入。
+- `plugin.py` 从 `handlers/`、`hooks/`、`core/`、`rendering/`、`persistence/` 直接导入。
+- `handlers/` 中的混入类从 `core/`、`rendering/` 导入，不依赖 SDK。
+- `hooks/` 中的处理函数接收 ``plugin`` 实例作为参数，不做模块级导入。
 - `story_load/` 中无 SDK 依赖的模块（如 `people_manage.py`）保持独立。
 - `story_load/__init__.py` 从 `..core.state_machine` 导入状态机类型（单一数据源）。
 - `renderer.py` 保留为向后兼容的重新导出入口。
@@ -163,20 +188,26 @@ char_name = CHARACTERS.get(char_id, {}).get("name", char_id)
 | 新增工作 | br_story/base_story/base_work.json / story_load/story_manage.py | `WorkManager` |
 | 新增楼层故事 | br_story/level_story/l\<N\>_story.txt | `StoryManager` |
 | 修改 LLM 提示词 | story_load/dialogue_manage.py | `build_system_prompt()` |
-| 修改命令 | plugin.py | `@Command` 装饰器方法 |
+| 新增/修改命令 | plugin.py（@Command 注册） + handlers/ 对应混入类（_do_* 实现） | `@Command` / `*CommandMixin` |
+| 新增/修改 Hook | plugin.py（@HookHandler 注册） + hooks/ 对应文件 | `@HookHandler` / hook 函数 |
 | 修改状态规则 | core/state_machine.py | `_TRANSITIONS` |
 | 修改探索逻辑 | core/exploration.py | `ExplorationService` |
 | 修改出口逻辑 | core/exit_handler.py | `ExitService` |
 | 修改游戏静态数据 | core/game_data.py | `ICONIC_LEVELS` / `GameDataService` |
 | 修改渲染消息 | rendering/renderer.py | `BackroomsRenderer` |
 | 修改存档格式 | persistence/save_manager.py | `SaveManager` |
+| 修改访问控制 | hooks/access_control.py | `check_access_before_command` |
+| 修改消息拦截 | hooks/message_hooks.py | `handle_dialog_message` / `check_shut_before_process` |
 
 ## 11. 约束
 
 - 修改 `story_load/` 模块导出后，必须同步更新 `story_load/__init__.py` 的 `__all__` 和 `rendering/__init__.py` 的 `__all__`。
 - 新增 `core/` 模块后，必须同步更新 `core/__init__.py` 的 `__all__`。
+- 新增 `handlers/` 混入类后，必须同步更新 `handlers/__init__.py` 的 `__all__` 并在 `plugin.py` 的类继承中添加。
+- 新增 `hooks/` 处理函数后，必须同步更新 `hooks/__init__.py` 的 `__all__` 并在 `plugin.py` 中注册对应的 `@HookHandler`。
 - 楼层编号不得硬编码（如 `== 1`），应使用角色 `level` 字段或配置项。
 - 不得删除 `update.md` 中的旧版本日志，仅在顶部追加。
 - 路径拼接一律使用 `pathlib.Path`，禁止 `os.path`。
 - `story_load/state_machine.py` 已删除，状态机类型统一从 `core/state_machine.py` 获取。
 - `renderer.py` 是向后兼容层，新代码应直接从 `rendering/`、`story_load/`、`core/` 导入。
+- 每个 `handlers/` 文件控制在 300 行以内，如需新增方法优先评估放入哪个现有混入类。

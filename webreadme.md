@@ -138,24 +138,47 @@ adapter 内部流程：
 ```
 backrooms_escape/
 │
-├── plugin.py                  # 插件主入口
-│                              游戏逻辑、命令注册、数据持久化
+├── plugin.py                  # 插件主入口 — 命令注册、Hook、生命周期（~570行）
+├── renderer.py                # 向后兼容层（透出各层公开符号）
+├── config.py                  # Pydantic 配置模型
 │
-├── renderer.py                # 消息渲染器 + 拓展模块加载入口
-│                              格式化所有回复文本；从 renderer_load/ 导入并透出所有拓展类
+├── core/                      # 核心游戏逻辑层
+│   ├── state_machine.py       #   有限状态机（GameStateMachine）
+│   ├── player_state.py        #   PlayerState 数据类
+│   ├── game_data.py           #   游戏静态数据 + GameDataService
+│   ├── exploration.py         #   ExplorationService（探索逻辑）
+│   └── exit_handler.py        #   ExitService（出口/回溯逻辑）
 │
-├── config.py                  # 配置模型
-│                              PluginConfigBase 子类，定义 [plugin]/[game]/[whitelist]/[blacklist]
+├── handlers/                  # 命令处理混入层（_do_* 方法按功能拆分）
+│   ├── base.py                #   HandlerBase — 共享工具方法
+│   ├── game_commands.py       #   GameCommandMixin — 开始/探索/使用物品
+│   ├── exit_commands.py       #   ExitCommandMixin — 出口搜索/楼层回溯
+│   ├── player_commands.py     #   PlayerCommandMixin — 查看状态/背包/帮助
+│   ├── story_commands.py      #   StoryCommandMixin — 故事档案
+│   ├── quest_commands.py      #   QuestCommandMixin — 任务系统
+│   ├── work_commands.py       #   WorkCommandMixin — 基地工作
+│   ├── character_commands.py  #   CharacterCommandMixin — 关系图/LLM对话
+│   ├── companion_commands.py  #   CompanionCommandMixin — 同伴同行/赠礼
+│   └── admin_commands.py      #   AdminCommandMixin — 管理员命令
 │
-├── renderer_load/             # 拓展功能模块目录
-│   ├── __init__.py            # 统一导出（上层只需 import renderer_load 即可）
-│   ├── state_machine.py       # 有限状态机 — GameState / GameEvent / GameStateMachine
-│   ├── shut.py                # 群聊静默管理 — ShutManager
-│   ├── story_manage.py        # 数据加载层 — StoryManager / PeopleStoryManager /
-│   │                          #               QuestManager / WorkManager / BaseWorkStoryManager
-│   ├── people_manage.py       # 角色业务层 — CharacterEncounterService / CHARACTERS 注册表
-│   ├── dialogue_manage.py     # LLM 对话系统
-│   └── backrooms_data.json    # 物品/实体数据池
+├── hooks/                     # Hook 处理器
+│   ├── access_control.py      #   黑白名单 + 插件禁用检查
+│   └── message_hooks.py       #   Planner 跳过 / 对话拦截 / 静默检查
+│
+├── rendering/                 # 渲染层（纯函数，无副作用）
+│   ├── renderer.py            #   BackroomsRenderer（所有消息格式化）
+│   ├── context.py             #   RenderContext（渲染参数容器）
+│   └── companion_script.py    #   同伴台词（独立维护）
+│
+├── story_load/                # 故事与角色数据管理
+│   ├── people_manage.py       #   CHARACTERS 注册表 + CharacterEncounterService
+│   ├── story_manage.py        #   QuestManager / WorkManager / StoryManager
+│   ├── dialogue_manage.py     #   LLM 对话系统
+│   ├── shut.py                #   ShutManager（群聊静默）
+│   └── backrooms_data.json    #   物品/实体数据
+│
+├── persistence/               # 持久化层
+│   └── save_manager.py        #   SaveManager（存档 CRUD + 迁移）
 │
 ├── br_story/                  # 故事/剧情/数据目录
 │   ├── level_story/           # 后室背景故事纸条文本
@@ -179,58 +202,21 @@ backrooms_escape/
 └── .gitignore
 ```
 
-### 分层设计
+### 模块依赖
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   plugin.py                          │
-│   命令路由 + 状态管理 + 存档读写 + 游戏流程编排         │
-│   依赖: renderer, config                             │
-└─────────────────────────┬───────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────┐
-│                   renderer.py                        │
-│   消息格式化 + 拓展模块统一加载入口                     │
-│   从 renderer_load/ 导入并透出所有类                   │
-└─────────────────────────┬───────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-┌─────────────────┐ ┌──────────┐ ┌──────────────────┐
-│  renderer_load/  │ │ config   │ │ renderer_load/   │
-│  state_machine   │ │          │ │ shut             │
-│  (FSM)           │ └──────────┘ │ (群聊静默)        │
-└─────────────────┘              └──────────────────┘
-                                  ┌──────────────────┐
-                                  │ renderer_load/   │
-                                  │ story_manage     │
-                                  │ (数据加载层)       │
-                                  │  .StoryManager    │
-                                  │  .PeopleStoryMgmt │
-                                  │  .QuestManager    │
-                                  │  .WorkManager     │
-                                  │  .BaseWorkStory   │
-                                  └────────┬─────────┘
-                                           │ 调用获取数据
-                                           ▼
-                                  ┌──────────────────┐
-                                  │ renderer_load/   │
-                                  │ people_manage    │
-                                  │ (角色业务层)       │
-                                  │  .CHARACTERS      │
-                                  │  .EncounterService│
-                                  └────────┬─────────┘
-                                           │ 调用生成回复
-                                           ▼
-                                  ┌──────────────────┐
-                                  │ renderer_load/   │
-                                  │ dialogue_manage  │
-                                  │ (LLM 对话系统)    │
-                                  │  .build_prompt   │
-                                  │  .message_list   │
-                                  └──────────────────┘
+plugin.py
+  ├── handlers/       (命令 _do_* 方法，按功能领域拆分为混入类)
+  │     └── handlers/base.py  (共享工具方法)
+  ├── hooks/          (Hook 处理逻辑)
+  ├── core/           (GameState, PlayerState, GameDataService, ...)
+  ├── rendering/      (BackroomsRenderer, RenderContext, companion_lines)
+  │     └── story_load/  (via rendering/__init__.py)
+  ├── persistence/    (SaveManager)
+  └── config.py
 ```
+
+> `plugin.py` 通过多重继承组合 `handlers/` 中的 9 个混入类，`@Command` 和 `@HookHandler` 方法为薄封装层，实际逻辑委托给对应模块。
 
 ### 数据流
 
@@ -245,13 +231,9 @@ backrooms_escape/
             └──→ _send()              ← 发送回复
 ```
 
-### 约定
-
-> 所有新增的功能拓展模块应放置在 `renderer_load/` 目录下，并在 `renderer.py` 中导入并透出。`plugin.py` 无需直接引用 `renderer_load/` 下的任何模块。
-
 ## 状态机
 
-插件使用**有限状态机（FSM）** 管理游戏核心流程，定义在 `renderer_load/state_machine.py` 中。
+插件使用**有限状态机（FSM）** 管理游戏核心流程，定义在 `core/state_machine.py` 中。
 
 ### 状态定义
 
@@ -798,14 +780,22 @@ backrooms_escape/
 │       ├── people_quests.json            ← 任务数据
 │       └── people_relationship.json      ← 人物关系数据
 ├── plugin.py
-├── renderer.py                           ← 渲染器 + 拓展模块加载入口
-├── renderer_load/
+├── renderer.py                           ← 向后兼容层
+├── core/
 │   ├── state_machine.py                  ← 游戏有限状态机
+│   └── game_data.py                      ← 游戏静态数据
+├── story_load/
 │   ├── shut.py                           ← 群聊静默管理
 │   ├── story_manage.py                   ← 故事/任务/工作/人物剧情加载
 │   ├── people_manage.py                  ← 角色系统（注册表 + 遭遇服务）
 │   ├── dialogue_manage.py                ← LLM 对话系统
 │   └── backrooms_data.json               ← 物品/实体数据
+├── rendering/
+│   └── renderer.py                       ← 消息渲染器
+├── persistence/
+│   └── save_manager.py                   ← 存档管理
+├── handlers/                             ← 命令处理混入类
+├── hooks/                                ← Hook 处理
 ├── config.py
 └── config.toml
 ```
