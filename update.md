@@ -1,5 +1,38 @@
 > **说明**：版本号与 [`_manifest.json`](_manifest.json) 中的 `version` 字段保持同步，更新版本时两者需一起修改。
 
+## v1.2.0 (2026-07-19)
+
+### 重构
+- **项目模块化重组**：按功能职责拆分为 4 个独立子包，消除原有 2781 行单片 plugin.py 的耦合问题
+  - 新增 `core/` 核心逻辑层：`state_machine.py`（状态机）、`player_state.py`（玩家数据）、`game_data.py`（静态数据 + GameDataService）、`exploration.py`（ExplorationService）、`exit_handler.py`（ExitService）
+  - 新增 `rendering/` 渲染层：`context.py`（RenderContext）、`renderer.py`（BackroomsRenderer）、`companion_script.py`（同伴台词独立文件）
+  - 新增 `persistence/` 持久化层：`save_manager.py`（SaveManager — 存档 CRUD + 迁移统一入口）
+  - `renderer_load/` 重命名为 `story_load/`：更准确地反映其故事数据管理的职责
+- **消除重复代码**：`story_load/state_machine.py` 已删除，状态机类型统一从 `core/state_machine.py` 获取（单一数据源）
+- **解耦同伴台词**：`companion_lines` 和 `companion_exit_lines` 从 `render_explore` / `render_exit_found` 方法体内嵌字典抽离至 `rendering/companion_script.py`，新增角色只需在此文件添加台词
+- `plugin.py` 从 2781 行精简至 2397 行，静态数据、PlayerState、存档操作均委托给对应子包
+- `renderer.py` 改为向后兼容层，透出 `rendering/`、`story_load/`、`core/` 的公开符号
+- `AGENTS.md` 全面更新：新增架构图、依赖关系图、层级原则、导入规则、第 9 节"游戏静态数据"和第 10 节"常见任务速查表"扩展
+
+### 新增
+- `GameDataService`：封装楼层信息查询（`get_level_info()`）、物品权重随机（`random_item()`）、物品显示名查找（`item_display_name()`）
+- `ExplorationService`：封装楼层探索和基地探索的完整业务逻辑（`process_explore()` / `process_explore_base()`）
+- `ExitService`：封装出口搜索和楼层回溯的完整业务逻辑（`try_exit()` / `try_exit_to_level()`）
+- `SaveManager`：统一管理存档文件路径、单文件保存/加载、批量加载、删除、旧版存档迁移（含 `_load_companions` 兼容）
+
+### 变更
+- 模块导入规则更新：`plugin.py` 从 `core/`、`rendering/`、`persistence/` 直接导入；`story_load/__init__.py` 从 `core/state_machine` 导入状态机类型
+- 存档迁移委托至 `SaveManager._migrate()` 静态方法
+
+### 修复
+- 移除 `plugin.py` 中 3 个未使用的导入（`companion_lines`、`companion_exit_lines`、`ICONIC_LEVELS`）
+- 修复 `dialog_manage.py` 中 `[思考]`/`[推理]` 标签的 CoT 剥离 Bug：原正则仅匹配标签本身（如 `[思考]`），导致内部推理内容泄漏；改为匹配完整包裹块 `\[思考\].*?\[/思考\]`
+- 修复 `exit_handler.py` 中 `elif shortcut:` 分支永远不可达的缺陷（所有楼层 `shortcut_to` 均为 `None`），将死代码注释化并加注说明
+- 修复 `persistence/save_manager.py` 通过 `from ..plugin import SAVE_VERSION` 惰性导入形成的循环依赖，将 `SAVE_VERSION` 内联为模块常量
+- 修复 `game_data.py` 中 Level 0/1/11 的 `entities` 字段为自然语言描述文本（而非 entity 键名），导致这三层永远无法触发实体遭遇；清空为 `[]`
+- 修复 `renderer.py` 兼容层 `__all__` 缺少 `companion_lines` 和 `companion_exit_lines` 导出
+- 删除 `plugin.py` 中从未被调用的死代码 `_player_file_path` 方法
+
 ## v1.1.7 (2026-07-10)
 
 ### 修复

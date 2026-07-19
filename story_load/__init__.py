@@ -1,11 +1,12 @@
-"""renderer_load — 拓展功能模块包
+"""story_load — 故事与角色数据管理包
 
-所有功能拓展 .py 文件应放置在此目录下，
-由 :mod:`~backrooms_escape.renderer` 统一加载并透出。
+管理故事文本、角色剧情、任务定义、工作定义等静态内容数据。
+状态机类型从 ``core.state_machine`` 统一获取，避免重复定义。
 """
 
 from __future__ import annotations
 
+from ..core.state_machine import GameState, GameEvent, GameStateMachine
 from .dialogue_manage import (
     build_system_prompt,
     build_message_list,
@@ -17,7 +18,6 @@ from .dialogue_manage import (
 )
 from .people_manage import CharacterEncounterService, EncounterResult, CHARACTERS
 from .shut import ShutManager
-from .state_machine import GameState, GameEvent, GameStateMachine
 from .story_manage import (
     StoryManager,
     PeopleStoryManager,

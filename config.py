@@ -42,7 +42,7 @@ class PluginSectionConfig(PluginConfigBase):
         },
     )
     config_version: str = Field(
-        default="1.1.0",
+        default="1.2.0",
         description="配置版本（与插件版本同步）",
         json_schema_extra={
             "label": "配置版本",

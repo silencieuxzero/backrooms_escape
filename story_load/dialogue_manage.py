@@ -118,10 +118,11 @@ _COT_PATTERNS: list[tuple[str, int]] = [
     (r"<think>.*?</think>", _re.IGNORECASE | _re.DOTALL),
     #  <reason>...</reason>  /  <REASON>...</REASON>
     (r"<reason>.*?</reason>", _re.IGNORECASE | _re.DOTALL),
-    #  【思考】...</思考>  /  [思考]...[/思考]
-    (r"\[/?思考\]", 0),
-    #  【推理】...</推理>  /  [推理]...[/推理]
-    (r"\[/?推理\]", 0),
+    #  【思考】...[/思考]  /  [推理]...[/推理]
+    (r"【思考】.*?【/思考】", _re.DOTALL),
+    (r"\[思考\].*?\[/思考\]", _re.DOTALL),
+    (r"【推理】.*?【/推理】", _re.DOTALL),
+    (r"\[推理\].*?\[/推理\]", _re.DOTALL),
     # ===== DeepSeek R1 风格 =====
     #   ...  内的推理块
     (r"```.*?```", _re.DOTALL),

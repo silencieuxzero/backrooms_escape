@@ -10,7 +10,6 @@ import asyncio
 import json
 import random
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -18,11 +17,27 @@ from maibot_sdk import Command, HookHandler, MaiBotPlugin
 from maibot_sdk.types import HookMode, HookOrder, ErrorPolicy
 
 from .config import BackroomsGameConfig
-from .renderer import (
-    BackroomsRenderer,
-    RenderContext,
+
+# ── 核心层 ──
+from .core import (
+    GameState,
     GameEvent,
     GameStateMachine,
+    PlayerState,
+    GameDataService,
+    ExplorationService,
+    ExitService,
+    load_items_pool,
+    ITEMS_POOL,
+    ENTITIES,
+    EXPLORE_EVENTS,
+    BASE_EXPLORE_EVENTS,
+    SHORTCUT_POOL,
+)
+
+# ── 渲染层 ──
+from .rendering import BackroomsRenderer, RenderContext
+from .rendering import (  # story_load re-exports
     CHARACTERS,
     CharacterEncounterService,
     build_system_prompt,
@@ -38,302 +53,20 @@ from .renderer import (
     ShutManager,
 )
 
-# ==================== 外部数据文件 ====================
+# ── 持久化层 ──
+from .persistence import SaveManager
 
-_BACKROOMS_DATA_PATH = Path(__file__).parent / "renderer_load" / "backrooms_data.json"
-"""插件目录下的物品/实体数据文件路径。"""
-
-ITEMS_POOL: list[dict] = []
-ENTITIES: dict[str, dict] = {}
-
-
-def _load_backrooms_data() -> None:
-    """加载 backrooms_data.json 到模块全局变量。"""
-    global ITEMS_POOL, ENTITIES
-    fp = _BACKROOMS_DATA_PATH
-    if not fp.is_file():
-        raise FileNotFoundError(f"缺少数据文件: {fp}，请确保 backrooms_data.json 存在于插件根目录。")
-    try:
-        data = json.loads(fp.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        raise RuntimeError(f"读取 backrooms_data.json 失败: {exc}") from exc
-
-    ITEMS_POOL = data.get("items", [])
-    ENTITIES = data.get("entities", {})
-    if not ITEMS_POOL:
-        raise RuntimeError("backrooms_data.json 中缺少 items 数据")
-    if not ENTITIES:
-        raise RuntimeError("backrooms_data.json 中缺少 entities 数据")
-
-
-# 模块导入时加载数据
-_load_backrooms_data()
+# 模块导入时加载物品/实体数据
+load_items_pool()
 
 
 # ==================== 版本常量 ====================
 
-PLUGIN_VERSION = "1.1.7"
+PLUGIN_VERSION = "1.2.0"
 """插件版本号（与 _manifest.json 同步）。"""
 
-SAVE_VERSION = "1.1.7"
+SAVE_VERSION = "1.2.0"
 """存档数据格式版本号，用于存档迁移兼容。"""
-
-
-# ==================== 游戏数据 ====================
-
-# 知名楼层的详细描述
-ICONIC_LEVELS: dict[int, dict[str, Any]] = {
-    0: {
-        "name": "前厅",
-        "title": "Level 0 — 「The Lobby / 前厅」",
-        "description": (
-            "你睁开眼，发现自己身处一个无限延伸的办公空间。\n"
-            "泛黄的墙壁、嗡嗡作响的荧光灯、散发着潮湿气味的地毯……\n"
-            "这里没有尽头，每个转角都通向另一个看起来完全相同的走廊。\n"
-            "这就是后室的起点——Level 0。作为 M.E.G.CN 的探员，你知道自己必须找到出口。"
-        ),
-        "danger": "低",
-        "entities": ["偶尔能听到远处有什么东西在爬行……"],
-        "shortcut_to": None,
-    },
-    1: {
-        "name": "宜居区",
-        "title": "Level 1 — 「Habitable Zone / 宜居区」",
-        "description": (
-            "你切入了 Level 1。这里的走廊更加宽阔，天花板更高，偶尔能看到一些仓库式的房间。\n"
-            "荧光灯的嗡嗡声小了，取而代之的是一种低沉的机械轰鸣。\n"
-            "这里相对安全，是 M.E.G.CN 建立了 Alpha 基地的地方。"
-        ),
-        "danger": "低",
-        "entities": ["偶尔有笑魇在远处游荡，但只要保持灯光就不会有事。"],
-        "shortcut_to": None,
-    },
-    2: {
-        "name": "管道梦魇",
-        "title": "Level 2 — 「Pipe Dreams / 管道梦魇」",
-        "description": (
-            "Level 2 是一片由无数大型管道组成的迷宫。温度骤然升高，空气闷热潮湿。\n"
-            "金属管道发出诡异的咔嗒声，蒸汽不时从破裂处喷出。\n"
-            "黑暗中似乎有什么在爬行……你最好小心脚下。"
-        ),
-        "danger": "中",
-        "entities": ["猎犬", "窃皮者"],
-        "shortcut_to": None,
-    },
-    3: {
-        "name": "电气站",
-        "title": "Level 3 — 「Electrical Station / 电气站」",
-        "description": (
-            "Level 3 是一座由无数电气设备组成的迷宫。墙壁上布满电线和配电箱，\n"
-            "电流的噼啪声此起彼伏。走廊狭窄曲折，时不时会有电火花闪过。\n"
-            "这里的危险不仅来自实体，更要小心触电。"
-        ),
-        "danger": "中",
-        "entities": ["笑魇", "电击实体"],
-        "shortcut_to": None,
-    },
-    4: {
-        "name": "废弃办公室",
-        "title": "Level 4 — 「Abandoned Office / 废弃办公室」",
-        "description": (
-            "Level 4 看起来像是一座被遗弃的办公大楼。桌椅散落一地，\n"
-            "电脑屏幕上闪烁着无意义的代码。窗户外面是一片纯白色的虚空。\n"
-            "这里比 Level 0 更加压抑，因为你能看到人类文明的痕迹，却找不到任何一个人。"
-        ),
-        "danger": "中",
-        "entities": ["猎犬", "死亡飞蛾"],
-        "shortcut_to": None,
-    },
-    5: {
-        "name": "恐怖旅馆",
-        "title": "Level 5 — 「Terror Hotel / 恐怖旅馆」",
-        "description": (
-            "Level 5 是一座装饰华丽的旅馆，红色的地毯、金色的壁纸、水晶吊灯……\n"
-            "但一切看起来都扭曲而诡异。走廊无限延伸，房门后的房间似乎不属于这个世界。\n"
-            "不要相信镜子里的倒影，那不是你。"
-        ),
-        "danger": "高",
-        "entities": ["镜像实体", "旅馆管理者"],
-        "shortcut_to": None,
-    },
-    6: {
-        "name": "熄灯",
-        "title": "Level 6 — 「Lights Out / 熄灯」",
-        "description": (
-            "Level 6 完全被黑暗吞没。没有光源，没有任何参照物。\n"
-            "你只能依靠触觉和听觉在这片虚无中摸索前行。\n"
-            "黑暗中传来窸窸窣窣的声音……如果你有手电筒，现在就是用的时候了。"
-        ),
-        "danger": "高",
-        "entities": ["笑魇（大量聚集）"],
-        "shortcut_to": None,
-    },
-    7: {
-        "name": "深海恐惧",
-        "title": "Level 7 — 「Thalassophobia / 深海恐惧」",
-        "description": (
-            "Level 7 是一片无边无际的海洋。你发现自己站在海面上，脚下是深不见底的黑暗水域。\n"
-            "水面上偶尔能看到漂浮的废墟和残骸。远处的海面下，似乎有巨大的阴影在缓缓移动……\n"
-            "不要看水下太久。"
-        ),
-        "danger": "极高",
-        "entities": ["深海之物", "不明巨兽"],
-        "shortcut_to": None,
-    },
-    8: {
-        "name": "洞穴系统",
-        "title": "Level 8 — 「Cave System / 洞穴系统」",
-        "description": (
-            "Level 8 是一个巨大而复杂的天然洞穴网络。钟乳石从洞顶垂下，\n"
-            "地面上布满了尖锐的岩石和深深的水潭。空气中弥漫着矿物质的味道。\n"
-            "洞穴深处传来诡异的回声……"
-        ),
-        "danger": "中",
-        "entities": ["洞穴爬行者", "笑魇"],
-        "shortcut_to": None,
-    },
-    9: {
-        "name": "暗黑郊区",
-        "title": "Level 9 — 「Darkened Suburbs / 暗黑郊区」",
-        "description": (
-            "Level 9 是一片永夜的郊区。整齐排列的房屋、空无一人的街道、\n"
-            "忽明忽暗的路灯……一切都笼罩在诡异的寂静之中。\n"
-            "有些房子的窗户里透出微弱的光，但你不确定是否应该去敲门。"
-        ),
-        "danger": "中",
-        "entities": ["邻里守望者", "猎犬"],
-        "shortcut_to": None,
-    },
-    10: {
-        "name": "丰收之景",
-        "title": "Level 10 — 「The Bumper Crop / 丰收之景」",
-        "description": (
-            "Level 10 是一片无边无际的麦田。金黄的麦浪在微风中摇曳，\n"
-            "天空中挂着永远不会落下的太阳。乍看之下宁静祥和，\n"
-            "但麦田深处隐藏着某种不为人知的恐怖。不要走得太远。"
-        ),
-        "danger": "中",
-        "entities": ["麦田守望者", "稻草人"],
-        "shortcut_to": None,
-    },
-    11: {
-        "name": "无尽城市",
-        "title": "Level 11 — 「The Endless City / 无尽城市」",
-        "description": (
-            "Level 11 是一座无限蔓延的现代化城市。高楼大厦林立，\n"
-            "街道整洁有序，但空无一人。这里是一个相对安全的楼层，\n"
-            "M.E.G.CN 在此设有多个前哨站。但你仍然需要保持警惕。"
-        ),
-        "danger": "低",
-        "entities": ["偶尔有笑魇出没"],
-        "shortcut_to": None,
-    },
-    399: {
-        "name": "真正的结局",
-        "title": "Level 399 — 「The True Ending / 真正的结局」",
-        "description": (
-            "⚡⚡⚡ 最终出口！ ⚡⚡⚡\n\n"
-            "经过漫长的旅程，你终于找到了传说中的 Level 399。\n"
-            "这是一扇巨大的白色门，门缝中透出温暖的光芒。\n"
-            "门上刻着模糊的文字——「欢迎回家」。\n\n"
-            "你深吸一口气，推开了这扇门……\n\n"
-            "恭喜！你已经从后室中成功逃出！"
-        ),
-        "danger": "无",
-        "entities": [],
-        "shortcut_to": None,
-    },
-}
-
-# 探索事件
-EXPLORE_EVENTS = [
-    {"type": "discovery", "text": "你在一堆杂物中发现了一些补给品。", "give_item": True},
-    {"type": "discovery", "text": "墙壁上刻着模糊的涂鸦：「走这边！→」——看来之前有人来过。"},
-    {"type": "discovery", "text": "你找到了一个 M.E.G.CN 遗弃的通讯设备，上面记录了一些关于附近出口的线索。"},
-    {"type": "danger", "text": "地板突然塌陷了一小块，你差点摔下去！", "health_cost": 5},
-    {"type": "danger", "text": "一股刺鼻的气体从通风口涌出，呛得你直咳嗽。", "health_cost": 5},
-    {"type": "discovery", "text": "你在一间废弃的办公室里找到了一张手绘地图，标记了附近区域的概况。"},
-    {"type": "discovery", "text": "地上散落着几页日记，上面的字迹潦草而绝望。其中一页写着出口的线索。"},
-    {"type": "neutral", "text": "你听到了远处传来的脚步声……但走近后发现什么都没有。"},
-    {"type": "neutral", "text": "荧光灯闪烁了几下，然后恢复了正常。空气变得更加凝重了。"},
-    {"type": "danger", "text": "你的手不小心碰到了墙壁上的不明黏稠物，皮肤有些刺痛。", "health_cost": 3},
-    {"type": "discovery", "text": "你在走廊拐角处发现了一个小型补给箱——运气不错！", "give_item": True},
-    {"type": "discovery", "text": "一张贴在墙上的 M.E.G.CN 公告：「前方高危区域，请谨慎前行。」"},
-    {"type": "neutral", "text": "你在一扇半开的门后面发现了一具已经干枯的遗骸，看来有人曾在这里绝望地等待。"},
-    {"type": "discovery", "text": "墙上的涂鸦写着一条线索：「红色的门通向安全的地方。」"},
-    {"type": "danger", "text": "一根断裂的管道从天花板上掉下来，险些砸到你！", "health_cost": 8},
-    {"type": "found_note", "text": "你在墙角发现了一张泛黄的纸条，上面似乎写着什么……"},
-]
-
-# ── Alpha 基地探索事件 ──
-# 仅在 Level 1 使用 /br explore base 时触发
-BASE_EXPLORE_EVENTS = [
-    {"area": "休息区", "text": "你走进 Alpha 基地的休息区。几盏暖黄色的灯照亮了摆放着旧沙发和折叠椅的角落，墙上的公告板贴满了便签和手绘地图。空气中弥漫着速溶咖啡的味道。", "type": "neutral"},
-    {"area": "通讯室", "text": "通讯室里设备嗡嗡作响。一名操作员正戴着耳机调试频率，屏幕上跳动着信号波形图。角落里堆着几台待修的无线电设备。", "type": "neutral"},
-    {"area": "工程部", "text": "工程部的门半掩着，里面传来工具碰撞的清脆声响。工作台上散落着拆开的零件和电路板，墙上挂满了各种手工改造的工具。", "type": "neutral"},
-    {"area": "食堂", "text": "食堂里，薛师傅正往大锅里倒着什么。几个探员围坐在简易餐桌旁，低声交流着各楼层的见闻。后室的罐头食品虽然乏味，但在这片混乱中能有一口热乎的已属不易。", "type": "discovery"},
-    {"area": "仓库", "text": "仓库里整齐地码放着物资箱——杏仁水、急救包、手电筒电池。管理员正在清点库存，看到你进来点了点头。", "type": "discovery"},
-    {"area": "档案室", "text": "档案室里弥漫着旧纸和灰尘的气味。铁皮柜里分类存放着各楼层的探索记录、实体观察报告和已知出口坐标。你在翻阅时发现了一些有趣的信息。", "type": "discovery", "info_gain": True},
-    {"area": "医疗站", "text": "医疗站的灯光比基地其他地方都要亮一些。简易的床位上躺着一名刚从前线回来的伤员，医护人员正在为他包扎伤口。", "type": "neutral"},
-    {"area": "训练场", "text": "训练场上，几名新人在进行模拟逃生演练。一名教官正在大声强调着后室生存的基本原则——「永远不要背对黑暗。」", "type": "neutral"},
-    {"area": "休息区", "text": "休息区里，有人在弹一把走了音的旧吉他。虽然音准不对，但那旋律在这样的环境里却出奇地让人安心。", "type": "neutral"},
-    {"area": "通讯室", "text": "你路过通讯室时，正好收到一段来自 Level 5 的加密信号。操作员表示解码后会交给信息分析组处理。", "type": "discovery", "info_gain": True},
-    {"area": "工程部", "text": "安继年不在工程部，但工作台上留着一张字条——「去北区修管道了，扳手别动。」旁边还放着一个简易的应急灯。", "type": "discovery", "give_item": True},
-    {"area": "食堂", "text": "食堂今天开了一箱宝贵的调味料。薛师傅心情不错，给每个人多加了一勺酱料——虽然不知道是什么做的，但至少让罐头有了些滋味。", "type": "neutral"},
-    {"area": "仓库", "text": "仓库管理员正在整理新到的一批物资。他看到你后把你叫住，递给你一小瓶杏仁水——「路上小心，新人。」", "type": "discovery", "give_item": True},
-    {"area": "档案室", "text": "你在档案室找到了一份旧日志，记录着 M.E.G.CN 刚建立 Alpha 基地时的艰难岁月。日志的作者用平淡的语气描述了最初那批人如何在 Level 1 扎下了根。", "type": "discovery", "info_gain": True},
-]
-
-# 捷径楼层
-SHORTCUT_POOL = [
-    {"levels_skip": (5, 15), "description": "你发现了一部还能运转的电梯，它带你穿过了多个楼层！"},
-    {"levels_skip": (3, 10), "description": "地板突然裂开，你跌入了一个滑道，加速滑过了数个楼层……"},
-    {"levels_skip": (2, 8), "description": "你找到了一扇标注着「快速通道」的防火门，M.E.G.CN 真该多建几个这样的东西。"},
-    {"levels_skip": (8, 20), "description": "一个神秘的传送门悬浮在半空中，你鼓起勇气走了进去——出来时已经跨越了多个楼层。"},
-]
-
-
-def _load_companions(data: dict) -> list[str]:
-    """从存档字典加载同行列表，兼容旧版单个 ``companion`` 字段。
-
-    - 新版（v1.1.3+）：``"companions": ["ankexin", "xiazhong"]``
-    - 旧版（v1.1.2-）：``"companion": "ankexin"``
-    """
-    raw = data.get("companions")
-    if isinstance(raw, list):
-        return list(raw)
-    raw = data.get("companion")
-    if isinstance(raw, str) and raw:
-        return [raw]
-    return []
-
-@dataclass
-class PlayerState:
-    """玩家游戏状态。"""
-    user_id: str = ""
-    current_level: int = 0
-    health: int = 100
-    sanity: int = 100
-    inventory: list[dict] = field(default_factory=list)
-    fsm: GameStateMachine = field(default_factory=GameStateMachine)
-    exit_attempts: int = 0  # 当前楼层尝试找出口的次数
-    pending_note: str | None = None  # 待阅读的纸条内容
-    unlocked_chars: set[str] = field(default_factory=set)  # 已解锁的角色 ID 集合
-    currency: int = 0  # M.E.G.CN 内部贡献点
-    active_quests: set[str] = field(default_factory=set)  # 进行中的任务 ID
-    completed_quests: set[str] = field(default_factory=set)  # 已完成的任务 ID
-    pending_quest_offer: str | None = None  # 待接受的任务 ID（角色给出但还未接受）
-    available_works: set[str] = field(default_factory=set)  # 基地可接的工作 ID
-    completed_works: set[str] = field(default_factory=set)  # 已完成的工作 ID
-    work_stories: set[str] = field(default_factory=set)  # 已解锁的工作故事 ID
-    l1_explore_count: int = 0  # Level 1 中已探索次数（达到阈值触发日常任务）
-    favorability: dict[str, int] = field(default_factory=dict)  # 角色好感度 {char_id: 数值}
-    companions: list[str] = field(default_factory=list)  # 同行角色 ID 列表
-    consecutive_misses: int = 0  # 同楼层连续未触发角色遭遇的次数
-    visited_levels: set[int] = field(default_factory=set)  # 已访问过的楼层集合
-    dialog_char_id: str | None = None  # 对话模式中的角色 ID，None 表示非对话模式
-    dialog_node_id: str = "start"  # 当前对话树节点 ID
-    dialog_history: list[dict[str, str]] = field(default_factory=list)  # 对话历史 [{role, content}]
 
 
 # ==================== 插件主体 ====================
@@ -362,6 +95,12 @@ class BackroomsGamePlugin(MaiBotPlugin):
         self._data_dir = Path(__file__).parent / "br_data"
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self.ctx.logger.info("br_data 目录已就绪: %s", self._data_dir)
+
+        # 初始化新模块服务
+        self._save_manager = SaveManager(self)
+        self._game_data = GameDataService()
+        self._exploration_service = ExplorationService(self)
+        self._exit_service = ExitService(self)
 
         # 初始化群聊静默管理器
         self._shut_manager = ShutManager(self._data_dir)
@@ -1197,111 +936,28 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     # ==================== 辅助方法 ====================
 
-    def _player_file_path(self, user_id: str) -> Path:
-        """获取指定用户的存档文件路径。"""
-        # 对 user_id 做安全文件名处理，防止路径穿越
-        safe_id = "".join(c for c in user_id if c.isalnum() or c in "_-")
-        return self._data_dir / f"{safe_id}.json"
-
     def _save_player(self, user_id: str) -> None:
         """将单个玩家状态保存为 JSON 文件。"""
         player = self._players.get(user_id)
-        if player is None:
-            return
-        data = {
-            "save_version": SAVE_VERSION,
-            "user_id": player.user_id,
-            "current_level": player.current_level,
-            "health": player.health,
-            "sanity": player.sanity,
-            "inventory": player.inventory,
-            "state": player.fsm.state.value,
-            "exit_attempts": player.exit_attempts,
-            "pending_note": player.pending_note,
-            "unlocked_chars": sorted(player.unlocked_chars),
-            "currency": player.currency,
-            "active_quests": sorted(player.active_quests),
-            "completed_quests": sorted(player.completed_quests),
-            "pending_quest_offer": player.pending_quest_offer,
-            "available_works": sorted(player.available_works),
-            "completed_works": sorted(player.completed_works),
-            "work_stories": sorted(player.work_stories),
-            "l1_explore_count": player.l1_explore_count,
-            "favorability": player.favorability,
-            "companions": list(player.companions),
-            "consecutive_misses": player.consecutive_misses,
-            "visited_levels": sorted(player.visited_levels),
-            "dialog_char_id": player.dialog_char_id,
-            "dialog_node_id": player.dialog_node_id,
-            "dialog_history": player.dialog_history,
-        }
-        filepath = self._player_file_path(user_id)
-        try:
-            filepath.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        except OSError as exc:
-            self.ctx.logger.error("保存玩家存档失败 user_id=%s: %s", user_id, exc)
+        if player is not None:
+            self._save_manager.save(player)
 
     def _load_player(self, user_id: str) -> PlayerState | None:
         """从 JSON 文件加载单个玩家状态；文件不存在则返回 None。"""
-        filepath = self._player_file_path(user_id)
-        if not filepath.is_file():
-            return None
-        try:
-            data = json.loads(filepath.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
-            self.ctx.logger.error("读取玩家存档失败 user_id=%s: %s", user_id, exc)
-            return None
-
-        # 自动迁移旧版存档到当前格式
-        data = self._migrate_save_data(data)
-
-        return PlayerState(
-            user_id=data.get("user_id", user_id),
-            current_level=data.get("current_level", 0),
-            health=data.get("health", 100),
-            sanity=data.get("sanity", 100),
-            inventory=data.get("inventory", []),
-            fsm=GameStateMachine.from_dict(data),
-            exit_attempts=data.get("exit_attempts", 0),
-            pending_note=data.get("pending_note"),
-            unlocked_chars=set(data.get("unlocked_chars", [])),
-            currency=data.get("currency", 0),
-            active_quests=set(data.get("active_quests", [])),
-            completed_quests=set(data.get("completed_quests", [])),
-            pending_quest_offer=data.get("pending_quest_offer"),
-            available_works=set(data.get("available_works", [])),
-            completed_works=set(data.get("completed_works", [])),
-            work_stories=set(data.get("work_stories", [])),
-            l1_explore_count=data.get("l1_explore_count", 0),
-            favorability=data.get("favorability", {}),
-            companions=_load_companions(data),
-            consecutive_misses=data.get("consecutive_misses", 0),
-            visited_levels=set(data.get("visited_levels", [])),
-            dialog_char_id=data.get("dialog_char_id"),
-            dialog_node_id=data.get("dialog_node_id", "start"),
-            dialog_history=data.get("dialog_history", []),
-        )
+        return self._save_manager.load(user_id)
 
     def _delete_player_save(self, user_id: str) -> None:
         """删除玩家存档文件（游戏结束/通关时调用）。"""
-        filepath = self._player_file_path(user_id)
-        try:
-            filepath.unlink(missing_ok=True)
-        except OSError as exc:
-            self.ctx.logger.error("删除玩家存档失败 user_id=%s: %s", user_id, exc)
+        self._save_manager.delete(user_id)
 
     def _save_all_players(self) -> None:
         """批量保存所有玩家状态。"""
-        for user_id in self._players:
-            self._save_player(user_id)
+        for player in self._players.values():
+            self._save_manager.save(player)
 
     def _load_all_players(self) -> None:
         """批量加载所有玩家存档恢复至内存。"""
-        for filepath in self._data_dir.glob("*.json"):
-            user_id = filepath.stem  # 文件名去扩展名即 user_id
-            player = self._load_player(user_id)
-            if player is not None:
-                self._players[user_id] = player
+        self._save_manager.load_all(self._players)
 
     # ==================== 存档迁移 ====================
 
@@ -1319,14 +975,8 @@ class BackroomsGamePlugin(MaiBotPlugin):
         Returns:
             迁移后的存档字典（当前格式）。
         """
-        save_version = data.get("save_version", "0.0.0")
-
-        if save_version == "0.0.0":
-            # 无版本号存档（v1.0.1 / v1.0.2 格式）
-            # 当前格式与旧版兼容，无需字段变更
-            pass
-
-        # 标记为当前版本
+        from .persistence.save_manager import SaveManager as _SM
+        data = _SM._migrate(data)
         data["save_version"] = SAVE_VERSION
         return data
 
@@ -1448,37 +1098,7 @@ class BackroomsGamePlugin(MaiBotPlugin):
 
     def _get_level_info(self, level: int) -> dict[str, Any]:
         """获取楼层信息。"""
-        if level in ICONIC_LEVELS:
-            return ICONIC_LEVELS[level]
-
-        # 程序化生成普通楼层
-        danger_levels = ["低", "低", "中", "中", "中", "高", "高", "极高"]
-        danger = danger_levels[min(level // 50, len(danger_levels) - 1)]
-
-        themes = [
-            "无尽的走廊和单调的房间",
-            "像迷宫一样的废弃建筑群",
-            "扭曲而令人不安的几何空间",
-            "昏暗潮湿的地下隧道",
-            "空旷而诡异的工业复合体",
-            "漂浮在虚空中的破碎建筑碎片",
-            "充满异样植物的室内温室",
-            "不断旋转的楼梯和错位的房间",
-        ]
-        theme = themes[level % len(themes)]
-
-        return {
-            "name": f"未知区域-{level}",
-            "title": f"Level {level}",
-            "description": (
-                f"你来到了 Level {level}。这是一个未被充分记录的后室楼层。\n"
-                f"这里的主要特征是{theme}。\n"
-                f"危险等级：{danger}。保持警惕，继续前进。"
-            ),
-            "danger": danger,
-            "entities": ["未知实体"],
-            "shortcut_to": None,
-        }
+        return self._game_data.get_level_info(level)
 
     def _has_item(self, player: PlayerState, item_name: str) -> bool:
         """检查玩家是否拥有某物品。"""
@@ -1505,27 +1125,16 @@ class BackroomsGamePlugin(MaiBotPlugin):
             dict: 随机选中的物品数据。
         """
         cfg = self.config.game
-        weights = [
-            cfg.item_weight_o1,
-            cfg.item_weight_o2,
-            cfg.item_weight_o3,
-            cfg.item_weight_o4,
-            cfg.item_weight_o5,
-            cfg.item_weight_o6,
-            cfg.item_weight_o7,
-        ]
-        # 确保总权重 > 0
-        total_weight = sum(weights)
-        if total_weight <= 0:
-            return random.choice(ITEMS_POOL)
-
-        r = random.randint(1, total_weight)
-        cumulative = 0
-        for i, w in enumerate(weights):
-            cumulative += w
-            if r <= cumulative and i < len(ITEMS_POOL):
-                return ITEMS_POOL[i]
-        return ITEMS_POOL[-1]
+        weights = {
+            "o1": cfg.item_weight_o1,
+            "o2": cfg.item_weight_o2,
+            "o3": cfg.item_weight_o3,
+            "o4": cfg.item_weight_o4,
+            "o5": cfg.item_weight_o5,
+            "o6": cfg.item_weight_o6,
+            "o7": cfg.item_weight_o7,
+        }
+        return self._game_data.random_item(weights)
 
     def _roll_crate(self, player: PlayerState) -> tuple[str, list[dict]] | None:
         """物资箱系统：根据配置概率和当前楼层生成物资箱。
