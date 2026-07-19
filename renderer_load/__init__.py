@@ -11,6 +11,7 @@ from .dialogue_manage import (
     build_message_list,
     trim_history,
     is_end_dialog,
+    strip_cot,
     MAX_HISTORY_ROUNDS,
     END_DIALOG_KEYWORDS,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "build_message_list",
     "trim_history",
     "is_end_dialog",
+    "strip_cot",
     "MAX_HISTORY_ROUNDS",
     "END_DIALOG_KEYWORDS",
     "ShutManager",
